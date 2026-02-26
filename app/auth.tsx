@@ -14,6 +14,7 @@ import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { Alert } from "react-native";
 
+
 // --- MOCK DATABASE ---
 // Since we don't have a real backend yet, we simulate registered users here.
 // You can add more dummy users to test different roles!
@@ -33,58 +34,80 @@ export default function Auth() {
     const [errorMessage, setErrorMessage] = useState(""); // State to hold our error text
 
     const handleLogin = async () => {
+        // 1. Basic validation
+        if (!mobile || !password) {
+            Alert.alert("Error", "Please enter both mobile number and password.");
+            return;
+        }
+
+        // 2. Prepare credentials
+        const cleanMobile = mobile.trim();
+        const cleanPassword = password.trim();
+        const authEmail = `${cleanMobile}@sevaasha.com`;
+
+        try {
+            // 3. Authenticate with Firebase Auth
+            const userCredential = await signInWithEmailAndPassword(auth, authEmail, cleanPassword);
+            const user = userCredential.user;
+
+            const collectionName = role === "Mother" ? "beneficiaries" : "users";
+            // 4. Fetch the user's "Official Profile" from Firestore
+            const userDocRef = doc(db, collectionName, user.uid);
+            const userDocSnap = await getDoc(userDocRef);
+
+            if (userDocSnap.exists()) {
+                const userData = userDocSnap.data();
+
+                // --- 🛑 SECURITY ROLE CHECK ---
+                // This compares the button you clicked vs what's in the database
+                if (userData.role !== role) {
+                    await auth.signOut(); // Kick them out if it doesn't match
+                    Alert.alert(
+                        "Access Denied",
+                        `This account is registered as a ${userData.role}. You cannot log in as a ${role}.`
+                    );
+                    return;
+                }
+
+                // --- ⏳ APPROVAL CHECK ---
+                if (userData.status === "Pending") {
+                    await auth.signOut();
+                    Alert.alert(
+                        "Account Pending",
+                        "Your account is waiting for Admin approval."
+                    );
+                    return;
+                }
+
+                // --- ✅ SUCCESS: Redirect to Dashboard ---
+                router.replace({
+                    pathname: "/dashboard",
+                    params: {
+                        role: userData.role,
+                        mobile: userData.mobile,
+                        name: userData.fullName
+                    }
+                });
+
+            } else {
+                Alert.alert("Error", "User profile not found in database.");
+            }
+
+        } catch (error: any) {
+            console.error("Login Error:", error.code);
+            Alert.alert("Login Failed", "Incorrect mobile number or password.");
+        }
+
+// Use cleanPassword in the signIn function
+
         if (!mobile || !password) {
             Alert.alert("Error", "Please enter both mobile number and password.");
             return;
         }
 
         // Recreate the fake email we used during registration
-        const authEmail = `${mobile}@sevaasha.com`;
 
-        try {
-            // 1. Authenticate with Firebase securely
-            const userCredential = await signInWithEmailAndPassword(auth, authEmail, password);
-            const user = userCredential.user;
-
-            // 2. Fetch the user's details (Role, Status, Name) from Firestore
-            const userDocRef = doc(db, "users", user.uid);
-            const userDocSnap = await getDoc(userDocRef);
-
-            if (userDocSnap.exists()) {
-                const userData = userDocSnap.data();
-
-                // 3. SECURITY CHECK: Are they approved?
-                if (userData.status === "Pending") {
-                    Alert.alert(
-                        "Account Pending",
-                        "Your account has been registered but is waiting for an Admin to approve it."
-                    );
-                    // Optionally sign them out so they don't stay in a half-logged-in state
-                    await auth.signOut();
-                    return;
-                }
-
-                // 4. Success! Send them to the Dashboard with their real role from the database
-                router.replace({
-                    pathname: "/dashboard",
-                    params: { role: userData.role, mobile: userData.mobile }
-                });
-
-            } else {
-                Alert.alert("Error", "User details not found in the database.");
-            }
-
-        } catch (error: any) {
-            console.error("Login Error:", error);
-
-            // Handle common login errors gracefully
-            if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') {
-                Alert.alert("Login Failed", "Incorrect mobile number or password.");
-            } else {
-                Alert.alert("Error", error.message);
-            }
-        }
-    };
+};
 
 
     return (
