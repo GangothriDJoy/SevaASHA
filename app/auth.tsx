@@ -8,6 +8,20 @@ import {
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Picker } from "@react-native-picker/picker";
+import { Ionicons } from "@expo/vector-icons";
+import { auth, db } from "../firebaseConfig";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+import { Alert } from "react-native";
+
+// --- MOCK DATABASE ---
+// Since we don't have a real backend yet, we simulate registered users here.
+// You can add more dummy users to test different roles!
+const mockRegisteredUsers = [
+    { role: "ASHA Worker", mobile: "9876543210", password: "Password1!" },
+    { role: "Mother", mobile: "9998887776", password: "Password2!" },
+    { role: "Supervisor", mobile: "1112223334", password: "Password1!" }
+];
 
 export default function Auth() {
     const router = useRouter();
@@ -15,6 +29,63 @@ export default function Auth() {
     const [role, setRole] = useState("ASHA Worker");
     const [mobile, setMobile] = useState("");
     const [password, setPassword] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
+    const [errorMessage, setErrorMessage] = useState(""); // State to hold our error text
+
+    const handleLogin = async () => {
+        if (!mobile || !password) {
+            Alert.alert("Error", "Please enter both mobile number and password.");
+            return;
+        }
+
+        // Recreate the fake email we used during registration
+        const authEmail = `${mobile}@sevaasha.com`;
+
+        try {
+            // 1. Authenticate with Firebase securely
+            const userCredential = await signInWithEmailAndPassword(auth, authEmail, password);
+            const user = userCredential.user;
+
+            // 2. Fetch the user's details (Role, Status, Name) from Firestore
+            const userDocRef = doc(db, "users", user.uid);
+            const userDocSnap = await getDoc(userDocRef);
+
+            if (userDocSnap.exists()) {
+                const userData = userDocSnap.data();
+
+                // 3. SECURITY CHECK: Are they approved?
+                if (userData.status === "Pending") {
+                    Alert.alert(
+                        "Account Pending",
+                        "Your account has been registered but is waiting for an Admin to approve it."
+                    );
+                    // Optionally sign them out so they don't stay in a half-logged-in state
+                    await auth.signOut();
+                    return;
+                }
+
+                // 4. Success! Send them to the Dashboard with their real role from the database
+                router.replace({
+                    pathname: "/dashboard",
+                    params: { role: userData.role, mobile: userData.mobile }
+                });
+
+            } else {
+                Alert.alert("Error", "User details not found in the database.");
+            }
+
+        } catch (error: any) {
+            console.error("Login Error:", error);
+
+            // Handle common login errors gracefully
+            if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') {
+                Alert.alert("Login Failed", "Incorrect mobile number or password.");
+            } else {
+                Alert.alert("Error", error.message);
+            }
+        }
+    };
+
 
     return (
         <View style={styles.container}>
@@ -48,23 +119,35 @@ export default function Auth() {
                     keyboardType="phone-pad"
                 />
 
-                <TextInput
-                    placeholder="Password"
-                    secureTextEntry
-                    style={styles.input}
-                    value={password}
-                    onChangeText={setPassword}
-                />
+                <View style={styles.passwordContainer}>
+                    <TextInput
+                        placeholder="Password"
+                        secureTextEntry={!showPassword}
+                        style={styles.passwordInput}
+                        value={password}
+                        onChangeText={setPassword}
+                    />
+                    <TouchableOpacity
+                        style={styles.eyeIcon}
+                        onPress={() => setShowPassword(!showPassword)}
+                    >
+                        <Ionicons name={showPassword ? "eye-off" : "eye"} size={24} color="#777" />
+                    </TouchableOpacity>
+                </View>
+
+                {/* Conditionally render the error message if it exists */}
+                {errorMessage ? (
+                    <Text style={styles.errorText}>{errorMessage}</Text>
+                ) : null}
 
                 <TouchableOpacity
                     style={styles.loginButton}
-                    onPress={() => router.push("/dashboard")}
+                    onPress={handleLogin} // Changed this from router.push to our new function
                 >
                     <Text style={styles.loginText}>LOGIN</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-
                     onPress={() => router.push("/register")}
                 >
                     <Text style={styles.registerLink}>New user? Register here</Text>
@@ -107,6 +190,20 @@ const styles = StyleSheet.create({
         borderRadius: 10,
         marginBottom: 15,
     },
+    passwordContainer: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "white",
+        borderRadius: 10,
+        marginBottom: 15,
+    },
+    passwordInput: {
+        flex: 1,
+        padding: 15,
+    },
+    eyeIcon: {
+        padding: 15,
+    },
     loginButton: {
         backgroundColor: "#4CAF50",
         padding: 16,
@@ -125,4 +222,11 @@ const styles = StyleSheet.create({
         color: "#1F7A6B",
         fontWeight: "500",
     },
+    // Added style for the error text
+    errorText: {
+        color: "red",
+        textAlign: "center",
+        marginBottom: 10,
+        fontWeight: "500",
+    }
 });
