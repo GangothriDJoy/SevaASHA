@@ -20,6 +20,14 @@ export default function Dashboard() {
         activeWorkers: 124,
     };
 
+    const ashaStats = {
+        todayVisits: 8,
+        ancDue: 3,
+        immunizationDue: 5,
+        completedVisits: 28,
+        targetVisits: 40
+    };
+
     return (
         <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
             <View style={styles.header}>
@@ -113,7 +121,69 @@ export default function Dashboard() {
                         </View>
                     </View>
                 )}
+                {/* --- 🎯 ASHA WORKER DASHBOARD (NEW) --- */}
+                {userRole === "ASHA Worker" && (
+                    <View style={styles.ashaSection}>
 
+                        {/* 2. Tasks for Today Card */}
+                        <TouchableOpacity style={styles.tasksCard}>
+                            <View style={styles.tasksHeader}>
+                                <Text style={styles.tasksTitle}>Tasks for Today</Text>
+                                <View style={styles.taskBadge}><Text style={styles.taskBadgeText}>{ashaStats.todayVisits} Due</Text></View>
+                            </View>
+                            <View style={styles.taskRow}>
+                                <Ionicons name="calendar-outline" size={18} color="#666" />
+                                <Text style={styles.taskItem}>{ashaStats.ancDue} ANC Checkups • {ashaStats.immunizationDue} Immunizations</Text>
+                            </View>
+                        </TouchableOpacity>
+
+                        {/* 1. Beneficiary & Data Entry Grid */}
+                        <Text style={styles.sectionTitle}>Beneficiary Management</Text>
+                        <View style={styles.actionGrid}>
+                            <TouchableOpacity style={styles.actionButton}>
+                                <Ionicons name="person-add" size={30} color="#1F7A6B" />
+                                <Text style={styles.actionText}>Add New</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.actionButton}>
+                                <Ionicons name="list" size={30} color="#1F7A6B" />
+                                <Text style={styles.actionText}>My Records</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.actionButton}>
+                                <Ionicons name="fitness" size={30} color="#1F7A6B" />
+                                <Text style={styles.actionText}>Health Entry</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.actionButton}>
+                                <Ionicons name="journal" size={30} color="#1F7A6B" />
+                                <Text style={styles.actionText}>Visit Log</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* 3. Emergency SOS */}
+                        <TouchableOpacity
+                            style={[styles.emergencyCard, {marginTop: 10}]}
+                            onPress={() => alert("SOS Alert Sent to Supervisor!")}
+                        >
+                            <View style={styles.emergencyHeader}>
+                                <Ionicons name="alert-circle" size={26} color="white" />
+                                <Text style={styles.emergencyTitle}>EMERGENCY SOS</Text>
+                            </View>
+                            <Text style={styles.emergencySubText}>Press to alert supervisor of a high-risk medical emergency.</Text>
+                        </TouchableOpacity>
+
+                        {/* 6. Notifications */}
+                        <Text style={styles.sectionTitle}>Recent Notifications</Text>
+                        <View style={styles.notifyBox}>
+                            <Ionicons name="notifications" size={20} color="#1F7A6B" />
+                            <Text style={styles.notifyText}>New Govt Scheme: Matru Vandana update available.</Text>
+                        </View>
+
+                        {/* 7. Simple Performance */}
+                        <View style={styles.performanceRow}>
+                            <Text style={styles.performanceLabel}>Monthly Visits Completed: </Text>
+                            <Text style={styles.performanceValue}>28 / 40</Text>
+                        </View>
+                    </View>
+                )}
                 {/* ... (Keep your ASHA Worker and Mother UI blocks here if you still have them) ... */}
 
                 <TouchableOpacity style={styles.logoutButton} onPress={() => router.replace("/auth")}>
@@ -157,4 +227,18 @@ const styles = StyleSheet.create({
 
     logoutButton: { backgroundColor: "#FF3B30", padding: 15, borderRadius: 10, alignItems: "center", marginTop: 30, marginBottom: 40 },
     logoutText: { color: "white", fontWeight: "bold", fontSize: 16 },
+    // --- NEW ASHA STYLES ---
+    ashaSection: { marginTop: 5 },
+    tasksCard: { backgroundColor: 'white', padding: 18, borderRadius: 15, borderLeftWidth: 5, borderLeftColor: '#1F7A6B', elevation: 3, marginBottom: 10 },
+    tasksHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+    tasksTitle: { fontSize: 18, fontWeight: 'bold', color: '#333' },
+    taskBadge: { backgroundColor: '#E8F5E9', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+    taskBadgeText: { color: '#2E7D32', fontWeight: 'bold', fontSize: 12 },
+    taskRow: { flexDirection: 'row', alignItems: 'center' },
+    taskItem: { marginLeft: 8, color: '#555', fontSize: 14 },
+    notifyBox: { backgroundColor: '#E0F2F1', padding: 15, borderRadius: 10, flexDirection: 'row', alignItems: 'center' },
+    notifyText: { marginLeft: 10, fontSize: 13, color: '#00695C', flex: 1 },
+    performanceRow: { flexDirection: 'row', marginTop: 20, padding: 10, backgroundColor: '#eee', borderRadius: 8, justifyContent: 'center' },
+    performanceLabel: { color: '#666', fontWeight: '500' },
+    performanceValue: { color: '#1F7A6B', fontWeight: 'bold' }
 });
