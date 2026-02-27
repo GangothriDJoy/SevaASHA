@@ -1,4 +1,4 @@
-import {initializeApp, getApps, getApp, FirebaseApp} from "firebase/app";
+import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { Auth, initializeAuth, getReactNativePersistence, getAuth } from "firebase/auth";
 import { Platform } from 'react-native';
@@ -14,28 +14,29 @@ const firebaseConfig = {
     measurementId: "G-52RNQL95D6"
 };
 
-// 1. HOT RELOAD FIX: Check if Firebase is already running
+// Declare variables that will be assigned during initialization
 let app: FirebaseApp;
 let auth: Auth;
 
 if (getApps().length === 0) {
+    // 1. Initialize the app for the first time
     app = initializeApp(firebaseConfig);
 
-    // Use React Native persistence ONLY on mobile devices
+    // 2. Setup Auth Persistence
     if (Platform.OS !== 'web') {
         auth = initializeAuth(app, {
             persistence: getReactNativePersistence(ReactNativeAsyncStorage)
         });
     } else {
-        // Use standard browser persistence for Web
         auth = getAuth(app);
     }
 } else {
+    // 3. If already running (Hot Reload), use existing instances
     app = getApp();
     auth = getAuth(app);
 }
 
-// 2. Initialize Database
+// 4. Initialize Database once using the 'app' instance from above
 const db = getFirestore(app, "default");
 
 export { auth, db };
