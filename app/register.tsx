@@ -110,7 +110,7 @@ export default function Register() {
         return text.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
     };
 
-    const isDuplicateMobile = existingUsers.includes(formData.mobile);
+    //const isDuplicateMobile = existingUsers.includes(formData.mobile);
     const isMobileValid = formData.mobile.length === countryCodeRules[formData.countryCode];
     const isAltSameAsPrimary = formData.mobile.length > 0 && formData.mobile === formData.altMobile;
     const isPincodeValid = formData.pincode.length === 6 && /^\d+$/.test(formData.pincode);
@@ -136,10 +136,13 @@ export default function Register() {
     const [dbDuplicate, setDbDuplicate] = useState(false);
 
     useEffect(() => {
+        setDbDuplicate(false);
+        let isMounted = true;
         const checkMobileInDB = async () => {
-            // Only check if it's a full 10-digit number
-            if (formData.mobile.length === 10) {
+            const requiredLength = countryCodeRules[formData.countryCode] || 10;
+            if (formData.mobile.length === requiredLength) {
                 setIsCheckingMobile(true);
+                setDbDuplicate(false);
                 try {
                     // We must check BOTH collections
                     const collections = ["users", "beneficiaries"];
@@ -148,24 +151,31 @@ export default function Register() {
                     for (const col of collections) {
                         const q = query(collection(db, col), where("mobile", "==", formData.mobile));
                         const querySnapshot = await getDocs(q);
+                        if (!isMounted) return;
                         if (!querySnapshot.empty) {
                             found = true;
                             break;
                         }
+                    }if (isMounted) {
+                        setDbDuplicate(found);
+                        console.log("Database Check Result:", found); // Debugging line
                     }
-                    setDbDuplicate(found);
                 } catch (error) {
                     console.error("Error checking mobile:", error);
                 } finally {
-                    setIsCheckingMobile(false);
+                    if(isMounted) setIsCheckingMobile(false);
                 }
             } else {
-                setDbDuplicate(false); // Reset if they delete a digit
+                setDbDuplicate(false);
+                setIsCheckingMobile(false);
             }
         };
-
         checkMobileInDB();
-    }, [formData.mobile]);
+        return() => {
+            isMounted = false;
+        };
+    }, [formData.mobile, formData.countryCode]);
+
     const handleRegister = async () => {
         const { mobile, password, fullName, role } = formData;
         if (!mobile || !password || !fullName || role === "" || role ==="-Select-") {
@@ -380,27 +390,33 @@ export default function Register() {
                         <TextInput style={[styles.input, styles.flexInput, dbDuplicate ? { borderColor: 'red' } : null, { height: 50, color: "#000", outlineStyle: 'none', marginTop: 0, marginBottom: 0 } as any]} keyboardType="phone-pad" value={formData.mobile} onChangeText={(val) => updateField("mobile", val.replace(/[^0-9]/g, ''))} maxLength={countryCodeRules[formData.countryCode]}  />
                     </View>
                     <View>
-                        {/* 1. If it's a duplicate - Show Error */}
-                        {dbDuplicate && (
+                        {/* 1. Show 'Checking...' while the Firebase query is running */}
+                        {isCheckingMobile && (
+                            <Text style={{ color: '#666', fontSize: 12, marginTop: 5 }}>⏳ Verifying number...</Text>
+                        )}
+
+                        {/* 2. If it's a duplicate - Show Error */}
+                        {!isCheckingMobile && dbDuplicate && (
                             <Text style={styles.errorText}>
-                                ⚠️ This number is already registered in our database.Login using your account.
+                                ⚠️ This number is already registered. Please login instead.
                             </Text>
                         )}
 
-                        {/* 2. If it's NOT a duplicate, but NOT yet 10 digits - Show Warning */}
-                        {!dbDuplicate && formData.mobile.length > 0 && formData.mobile.length < 10 && (
+                        {/* 3. If NOT a duplicate, NOT checking, but NOT yet full length - Show Warning */}
+                        {!isCheckingMobile && !dbDuplicate && formData.mobile.length > 0 && formData.mobile.length < (countryCodeRules[formData.countryCode] || 10) && (
                             <Text style={styles.warningText}>
-                                Needs {countryCodeRules[formData.countryCode]} digits.
+                                Needs {countryCodeRules[formData.countryCode] || 10} digits.
                             </Text>
                         )}
 
-                        {/* 3. If it's NOT a duplicate AND it is exactly 10 digits - Show Success */}
-                        {!dbDuplicate && formData.mobile.length === 10 && (
+                        {/* 4. ONLY show Success if it's 10 digits, NOT checking, and NOT a duplicate */}
+                        {!isCheckingMobile && !dbDuplicate && formData.mobile.length === (countryCodeRules[formData.countryCode] || 10) && formData.mobile !== "" && (
                             <Text style={styles.successText}>
                                 ✓ Mobile number available
                             </Text>
                         )}
                     </View>
+
                     <View style={styles.row}>
                         {Platform.OS === "web" ? (
                             /* --- 💻 LAPTOP / WEB COUNTRY CODE --- */
@@ -460,7 +476,7 @@ export default function Register() {
                         />
                     </View>
                     {isAltSameAsPrimary && <Text style={styles.errorText}>Alternate number cannot be the same as primary.</Text>}
-                    {formData.mobile.length > 0 && !isMobileValid && !isDuplicateMobile && <Text style={styles.warningText}>Needs {countryCodeRules[formData.countryCode]} digits.</Text>}
+                    {formData.mobile.length > 0 && !isMobileValid && !dbDuplicate && <Text style={styles.warningText}>Needs {countryCodeRules[formData.countryCode]} digits.</Text>}
 
                     <Text style={styles.label}>Gender</Text>
 
