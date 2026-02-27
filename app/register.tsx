@@ -13,10 +13,10 @@ import {
 } from "react-native";
 import { auth, db } from "../firebaseConfig";
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc, getDocs, query, where, collection } from "firebase/firestore";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Picker } from "@react-native-picker/picker";
 import DateTimePicker from "@react-native-community/datetimepicker";
 
@@ -60,7 +60,7 @@ const initialFormData = {
     regNo: "", assignedPhc: "", contactOffice: "",
     empId: "", assignedBlock: "", officialEmail: "", designation: "", reportingAuth: "",
     motherAadhaar: "",
-    guardianName: "", guardianMobile: "", guardianCountryCode: "+91", guardianAadhaar: "", pregnancyStatus: "-Select-", lmp: "", trimester: "-Select-", isAnganwadiReported: "-Select-", hasChildren: "-Select-", noOfChildren: "", childrenDetails: [] as { name: string; age: string; vaccinated: string; food: string }[], childAges: "", rationCard: "", healthIssues: "None",
+    guardianName: "", guardianMobile: "", guardianCountryCode: "+91", guardianAadhaar: "", pregnancyStatus: "-Select-", lmp: "", trimester: "-Select-", isAnganwadiReported: "-Select-", hasChildren: "-Select-", vaccinated: "-Select-", noOfChildren: "", childrenDetails: [] as { name: string; age: string; vaccinated: string; food: string }[], childAges: "", rationCard: "", healthIssues: "None",
 };
 const reportingAuthorities = [
     "Select Authority",
@@ -87,7 +87,7 @@ export default function Register() {
         updateField("noOfChildren", count.toString());
 
         const newChildren = Array.from({ length: count }, (_, i) =>
-            formData.childrenDetails[i] || { name: "", age: "", vaccinated: "No", food: "No" }
+            formData.childrenDetails[i] || { name: "", age: "", vaccinated: "-Select-" }
         );
         updateField("childrenDetails", newChildren);
     };
@@ -131,17 +131,57 @@ export default function Register() {
         return { criteria, score };
     };
     const { criteria, score } = checkPasswordStrength(formData.password);
-
     const [datePickerTarget, setDatePickerTarget] = useState<"dob" | "lmp">("dob");
+    const [isCheckingMobile, setIsCheckingMobile] = useState(false);
+    const [dbDuplicate, setDbDuplicate] = useState(false);
+
+    useEffect(() => {
+        const checkMobileInDB = async () => {
+            // Only check if it's a full 10-digit number
+            if (formData.mobile.length === 10) {
+                setIsCheckingMobile(true);
+                try {
+                    // We must check BOTH collections
+                    const collections = ["users", "beneficiaries"];
+                    let found = false;
+
+                    for (const col of collections) {
+                        const q = query(collection(db, col), where("mobile", "==", formData.mobile));
+                        const querySnapshot = await getDocs(q);
+                        if (!querySnapshot.empty) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    setDbDuplicate(found);
+                } catch (error) {
+                    console.error("Error checking mobile:", error);
+                } finally {
+                    setIsCheckingMobile(false);
+                }
+            } else {
+                setDbDuplicate(false); // Reset if they delete a digit
+            }
+        };
+
+        checkMobileInDB();
+    }, [formData.mobile]);
     const handleRegister = async () => {
         const { mobile, password, fullName, role } = formData;
         if (!mobile || !password || !fullName || role === "" || role ==="-Select-") {
-            Alert.alert("Error", "Please fill in all required fields.");
+            const msg = "Please fill in all required fields.";
+            Platform.OS === 'web' ? alert(msg) : Alert.alert("Error", msg);
+            return;
+        }
+        if (dbDuplicate) {
+            const msg = "Cannot register: This mobile number is already in use.";
+            Platform.OS === 'web' ? alert(msg) : Alert.alert("Error", msg);
             return;
         }
         if (role === "Mother") {
             if (formData.pregnancyStatus === "" || formData.guardianName === "") {
-                Alert.alert("Incomplete Details", "Please complete the Guardian and Pregnancy sections.");
+                const msg = "Please complete the Guardian and Pregnancy sections.";
+                Platform.OS === 'web' ? alert(msg) : Alert.alert("Incomplete Details", msg);
                 return;
             }
         }
@@ -165,27 +205,29 @@ export default function Register() {
             delete (userProfileData as any).password;
             delete (userProfileData as any).confirmPassword;
             const collectionName = role === "Mother" ? "beneficiaries" : "users";
-            // Save to Firestore
             await setDoc(doc(db, collectionName, user.uid), userProfileData);
-
-            // 5. Success! Tell the user and send them to the login page
-            Alert.alert(
-                "Registration Successful!",
-                role === "Supervisor" ? "You can now log in." : "Your account is pending Admin approval."
-            );
-            router.replace("/auth");
+            const successMsg = role === "Supervisor" ? "You can now log in." : "Your account is pending Admin approval.";
+            if (Platform.OS === 'web') {
+                alert("Registration Successful!\n" + successMsg);
+                router.replace("/auth");
+            } else {
+                Alert.alert("Registration Successful!", successMsg, [
+                    { text: "OK", onPress: () => router.replace("/auth") }
+                ]);
+            }
 
         } catch (error: any) {
+            let errorMsg = error.message;
+            if (error.code === 'auth/email-already-in-use') errorMsg = "This mobile number is already registered!";
+            if (error.code === 'auth/weak-password') errorMsg="Password should be at least 6 characters.";
             console.error("Firebase Error:", error);
             console.error("Registration Error:", error);
             // If Database fails but Auth succeeds, you might want to handle that here
             Alert.alert("Error", error.message);
-            if (error.code === 'auth/email-already-in-use') {
-                Alert.alert("Error", "This mobile number is already registered!");
-            } else if (error.code === 'auth/weak-password') {
-                Alert.alert("Error", "Password should be at least 6 characters.");
-            } else {
-                Alert.alert("Registration Failed", error.message);
+            if (Platform.OS === 'web') {
+                alert("Error: " + errorMsg);
+            }else {
+                Alert.alert("Registration Failed", errorMsg);
             }
         }
     };
@@ -197,7 +239,18 @@ export default function Register() {
         }
         return data;
     };
-
+    const webSelectStyle = {
+        padding: '12px',
+        borderRadius: '10px',
+        border: '1px solid #ddd',
+        backgroundColor: 'white',
+        fontSize: '16px',
+        width: '100%',
+        height: '50px',
+        outline: 'none',
+        appearance: 'none', // Removes default browser arrow
+        cursor: 'pointer'
+    } as any;
     return (
         <KeyboardAvoidingView
             style={{ flex: 1 }}
@@ -220,22 +273,57 @@ export default function Register() {
                     </Text>
                     <Text style={styles.sectionTitle}>1. Select Account Type</Text>
                     <RequiredLabel text="Select Role"/>
-                    <View style={[
-                        styles.pickerContainer,
-                        !isRoleSelected && { borderColor: 'red' } // Highlights the box in red if empty
-                    ]}>
-                        <Picker
-                            selectedValue={formData.role}
-                            onValueChange={(val) => updateField("role", val)}
+
+                    {Platform.OS === "web" ? (
+                        /* --- 💻 LAPTOP / WEB DROPDOWN --- */
+                        // @ts-ignore
+                        <select
+                            value={formData.role || ""}
+                            onChange={(e: any) => updateField("role", e.target.value)}
+                            style={{
+                                padding: 15,
+                                borderRadius: 10,
+                                borderWidth: 1,
+                                // Keeps your validation logic active on the web!
+                                borderColor: !isRoleSelected ? "red" : "#ccc",
+                                backgroundColor: "white",
+                                fontSize: 16,
+                                fontFamily: "inherit",
+                                width: "100%",
+                                marginBottom: 15,
+                                boxSizing: "border-box",
+                                cursor: "pointer",
+                                outline: "none",
+                                color: (formData.role === "-Select-" || formData.role === "Not Selected") ? "#999" : "#000",
+                            }}
                         >
-                            <Picker.Item label="-Select-" value="" color="#999" />
-                            <Picker.Item label="ASHA Worker" value="ASHA Worker" />
-                            <Picker.Item label="Anganwadi Worker" value="Anganwadi Worker" />
-                            <Picker.Item label="JPHN" value="JPHN" />
-                            <Picker.Item label="Supervisor" value="Supervisor" />
-                            <Picker.Item label="Mother / Beneficiary" value="Mother" />
-                        </Picker>
-                    </View>
+                            <option value="" hidden style={{ color: "#999" }}>-Select-</option>
+                            <option value="" disabled>-Select-</option>
+                            <option value="ASHA Worker">ASHA Worker</option>
+                            <option value="Anganwadi Worker">Anganwadi Worker</option>
+                            <option value="JPHN">JPHN</option>
+                            <option value="Supervisor">Supervisor</option>
+                            <option value="Mother">Mother / Beneficiary</option>
+                        </select>
+                    ) : (
+                        /* --- 📱 MOBILE PICKER --- */
+                        <View style={[
+                            styles.pickerContainer,
+                            !isRoleSelected && { borderColor: 'red', borderWidth: 1 }
+                        ]}>
+                            <Picker
+                                selectedValue={formData.role}
+                                onValueChange={(val) => updateField("role", val)}
+                            >
+                                <Picker.Item label="-Select-" value="" color="#999" />
+                                <Picker.Item label="ASHA Worker" value="ASHA Worker" />
+                                <Picker.Item label="Anganwadi Worker" value="Anganwadi Worker" />
+                                <Picker.Item label="JPHN" value="JPHN" />
+                                <Picker.Item label="Supervisor" value="Supervisor" />
+                                <Picker.Item label="Mother / Beneficiary" value="Mother" />
+                            </Picker>
+                        </View>
+                    )}
 
                     {/* Error Message */}
                     {!isRoleSelected && (
@@ -247,79 +335,247 @@ export default function Register() {
                     <RequiredLabel text="Full Name" />
                     <TextInput style={styles.input} value={formData.fullName} onChangeText={handleNameChange} />
                     <RequiredLabel text="Mobile Number" />
-                    <View style={styles.row}>
-                        <View style={styles.countryPicker}>
-                            <Picker selectedValue={formData.countryCode} onValueChange={(val) => updateField("countryCode", val)}>
-                                {Object.keys(countryCodeRules).map(code => <Picker.Item key={code} label={code} value={code} />)}
-                            </Picker>
-                        </View>
-                        <TextInput style={[styles.input, styles.flexInput]} keyboardType="phone-pad" value={formData.mobile} onChangeText={(val) => updateField("mobile", val.replace(/[^0-9]/g, ''))} maxLength={countryCodeRules[formData.countryCode]} />
+                    <View style={[styles.row, { alignItems: 'center', marginTop: 15 }]}>
+                        {Platform.OS === "web" ? (
+                            /* --- 💻 LAPTOP / WEB COUNTRY CODE --- */
+                            <View style={[styles.countryPicker, { height: 50, justifyContent: 'center' }]}>
+                                {/* @ts-ignore */}
+                                <select
+                                    value={formData.countryCode}
+                                    onChange={(e: any) => updateField("countryCode", e.target.value)}
+                                    style={{
+                                        width: '90%',
+                                        height: '100%',
+                                        padding: '0 30px 0 10px',
+                                        borderRadius: 10,
+                                        border: 'none', // Removing border because countryPicker usually has its own
+                                        backgroundColor: 'transparent',
+                                        fontSize: 16,
+                                        fontFamily: 'inherit',
+                                        cursor: 'pointer',
+                                        outline: 'none',
+                                        textAlign: 'center',
+                                    }}
+                                >
+                                    {Object.keys(countryCodeRules).map(code => (
+                                        <option key={code} value={code} style={{ color: '#000' }}>
+                                            {code}
+                                        </option>
+                                    ))}
+                                </select>
+                            </View>
+                        ) : (
+                            /* --- 📱 MOBILE PICKER --- */
+                            <View style={styles.countryPicker}>
+                                <Picker
+                                    selectedValue={formData.countryCode}
+                                    onValueChange={(val) => updateField("countryCode", val)}
+                                >
+                                    {Object.keys(countryCodeRules).map(code => (
+                                        <Picker.Item key={code} label={code} value={code} />
+                                    ))}
+                                </Picker>
+                            </View>
+                        )}
+                        <TextInput style={[styles.input, styles.flexInput, dbDuplicate ? { borderColor: 'red' } : null, { height: 50, color: "#000", outlineStyle: 'none', marginTop: 0, marginBottom: 0 } as any]} keyboardType="phone-pad" value={formData.mobile} onChangeText={(val) => updateField("mobile", val.replace(/[^0-9]/g, ''))} maxLength={countryCodeRules[formData.countryCode]}  />
                     </View>
-                    {isDuplicateMobile && <Text style={styles.errorText}>User already exists! Login into your account through login page.</Text>}
-                    {formData.mobile.length > 0 && !isMobileValid && !isDuplicateMobile && <Text style={styles.warningText}>Needs {countryCodeRules[formData.countryCode]} digits.</Text>}
+                    <View>
+                        {/* 1. If it's a duplicate - Show Error */}
+                        {dbDuplicate && (
+                            <Text style={styles.errorText}>
+                                ⚠️ This number is already registered in our database.Login using your account.
+                            </Text>
+                        )}
 
+                        {/* 2. If it's NOT a duplicate, but NOT yet 10 digits - Show Warning */}
+                        {!dbDuplicate && formData.mobile.length > 0 && formData.mobile.length < 10 && (
+                            <Text style={styles.warningText}>
+                                Needs {countryCodeRules[formData.countryCode]} digits.
+                            </Text>
+                        )}
 
+                        {/* 3. If it's NOT a duplicate AND it is exactly 10 digits - Show Success */}
+                        {!dbDuplicate && formData.mobile.length === 10 && (
+                            <Text style={styles.successText}>
+                                ✓ Mobile number available
+                            </Text>
+                        )}
+                    </View>
                     <View style={styles.row}>
-                        <View style={styles.countryPicker}>
-                            <Picker selectedValue={formData.altCountryCode} onValueChange={(val) => updateField("altCountryCode", val)}>
-                                {Object.keys(countryCodeRules).map(code => <Picker.Item key={code} label={code} value={code} />)}
-                            </Picker>
-                        </View>
-                        <TextInput placeholder="Alternate Mobile Number (Optional)" style={[styles.input, styles.flexInput]} keyboardType="phone-pad" value={formData.altMobile} onChangeText={(val) => updateField("altMobile", val.replace(/[^0-9]/g, ''))} maxLength={countryCodeRules[formData.altCountryCode]} />
+                        {Platform.OS === "web" ? (
+                            /* --- 💻 LAPTOP / WEB COUNTRY CODE --- */
+                            <View style={styles.countryPicker}>
+                                {/* @ts-ignore */}
+                                <select
+                                    value={formData.countryCode}
+                                    onChange={(e: any) => updateField("countryCode", e.target.value)}
+                                    style={{
+                                        width: '90%',
+                                        height: '100%',
+                                        padding: '0 30px 0 10px',
+                                        borderRadius: 10,
+                                        border: 'none', // Removing border because countryPicker usually has its own
+                                        backgroundColor: 'transparent',
+                                        fontSize: 16,
+                                        fontFamily: 'inherit',
+                                        cursor: 'pointer',
+                                        outline: 'none',
+                                        textAlign: 'center',
+                                    }}
+                                >
+                                    {Object.keys(countryCodeRules).map(code => (
+                                        <option key={code} value={code} style={{ color: '#000'}}>
+                                            {code}
+                                        </option>
+                                    ))}
+                                </select>
+                            </View>
+                        ) : (
+                            /* --- 📱 MOBILE PICKER --- */
+                            <View style={styles.countryPicker}>
+                                <Picker
+                                    selectedValue={formData.countryCode}
+                                    onValueChange={(val) => updateField("countryCode", val)}
+                                >
+                                    {Object.keys(countryCodeRules).map(code => (
+                                        <Picker.Item key={code} label={code} value={code} />
+                                    ))}
+                                </Picker>
+                            </View>
+                        )}
+                        <TextInput
+                            placeholder="Alternate Mobile Number(Optional)"
+                            placeholderTextColor="#999"
+                            style={[
+                                styles.input,
+                                styles.flexInput,
+                                {
+                                    height: 50, color: "#000", outlineStyle: 'none', marginTop: 10, marginBottom: 10
+                                } as any
+                            ]}
+                            keyboardType="phone-pad"
+                            value={formData.altMobile}
+                            onChangeText={(val) => updateField("altMobile", val.replace(/[^0-9]/g, ''))}
+                            maxLength={countryCodeRules[formData.altCountryCode] || 10}
+                        />
                     </View>
                     {isAltSameAsPrimary && <Text style={styles.errorText}>Alternate number cannot be the same as primary.</Text>}
                     {formData.mobile.length > 0 && !isMobileValid && !isDuplicateMobile && <Text style={styles.warningText}>Needs {countryCodeRules[formData.countryCode]} digits.</Text>}
 
                     <Text style={styles.label}>Gender</Text>
-                    <View style={styles.pickerContainer}>
-                        <Picker
-                            selectedValue={formData.gender}
-                            onValueChange={(val) => updateField("gender", val)}
-                        >
-                            {/* Placeholder item: If they leave this, the value remains "Not Selected" */}
-                            <Picker.Item label="-Select-" value="Not Selected" color="#999" />
 
-                            {/* Specific Options */}
-                            <Picker.Item label="Male" value="male" />
-                            <Picker.Item label="Female" value="female" />
-                            <Picker.Item label="Other" value="other" />
-                        </Picker>
-                    </View>
+                    {Platform.OS === "web" ? (
+                        /* --- 💻 LAPTOP / WEB DROPDOWN --- */
+                        // @ts-ignore
+                        <select
+                            value={formData.gender || "Not Selected"}
+                            onChange={(e: any) => updateField("gender", e.target.value)}
+                            style={{
+                                padding: 15,
+                                borderRadius: 10,
+                                borderWidth: 1,
+                                borderColor: "#ccc",
+                                backgroundColor: "white",
+                                fontSize: 16,
+                                fontFamily: "inherit",
+                                width: "100%",
+                                marginBottom: 15,
+                                boxSizing: "border-box",
+                                cursor: "pointer",
+                                outline: "none",
+                                color: (formData.gender === "-Select-" || formData.gender === "Not Selected") ? "#999" : "#000",
+                            }}
+                        >
+                            <option value="" hidden style={{ color: "#999" }}>-Select-</option>
+                            <option value="" disabled style={{ color: "#999" }}>-Select-</option>
+                            <option value="male">Male</option>
+                            <option value="female">Female</option>
+                            <option value="other">Other</option>
+                        </select>
+                    ) : (
+                        /* --- 📱 MOBILE PICKER --- */
+                        <View style={styles.pickerContainer}>
+                            <Picker
+                                selectedValue={formData.gender}
+                                onValueChange={(val) => updateField("gender", val)}
+                            >
+                                <Picker.Item label="-Select-" value="Not Selected" color="#999" />
+                                <Picker.Item label="Male" value="male" />
+                                <Picker.Item label="Female" value="female" />
+                                <Picker.Item label="Other" value="other" />
+                            </Picker>
+                        </View>
+                    )}
 
                     <RequiredLabel text="Date of Birth" />
-                    <TouchableOpacity
-                        style={styles.input}
-                        onPress={() => {
-                            setDatePickerTarget("dob");
-                            setShowDatePicker(true);
-                        }}
-                    >
-                        <Text style={{ color: formData.dobString ? "#000" : "#999" }}>
-                            {formData.dobString ? formData.dobString : "Select Date of Birth"}
-                        </Text>
-                    </TouchableOpacity>
 
-                    {showDatePicker && (
+                    {Platform.OS === "web" ? (
+                        /* --- 💻 LAPTOP / WEB DATE PICKER --- */
+                        // @ts-ignore (Tells TypeScript to ignore HTML tags in React Native)
+                        <input
+                            type="date"
+                            value={formData.dobString || ""}
+                            onChange={(e: any) => {
+                                const dateString = e.target.value; // Returns format "YYYY-MM-DD"
+                                if (dateString) {
+                                    // Update both the Date object and the String
+                                    const selectedDate = new Date(dateString);
+                                    updateField("dob", selectedDate);
+                                    updateField("dobString", dateString);
+                                }
+                            }}
+                            style={{
+                                padding: 15,
+                                borderRadius: 10,
+                                borderWidth: 1,
+                                borderColor: "#ccc",
+                                backgroundColor: "white",
+                                fontSize: 16,
+                                fontFamily: "inherit",
+                                width: "100%",
+                                marginBottom: 15,
+                                boxSizing: "border-box",
+                            }}
+                        />
+                    ) : (
+                        /* --- 📱 MOBILE DATE PICKER BUTTON --- */
+                        <TouchableOpacity
+                            style={styles.input}
+                            onPress={() => {
+                                setDatePickerTarget("dob");
+                                setShowDatePicker(true);
+                            }}
+                        >
+                            <Text style={{ color: formData.dobString ? "#000" : "#999" }}>
+                                {formData.dobString ? formData.dobString : "Select Date of Birth"}
+                            </Text>
+                        </TouchableOpacity>
+                    )}
+
+                    {/* --- 📱 NATIVE MOBILE DATE PICKER POPUP --- */}
+                    {Platform.OS !== "web" && showDatePicker && (
                         <DateTimePicker
-                            // If picking LMP, show the current LMP date; otherwise show DOB
-                            value={datePickerTarget === "lmp" ? (formData.lmp ? new Date(formData.lmp) : new Date()) : formData.dob}
+                            value={
+                                datePickerTarget === "lmp"
+                                    ? (formData.lmp ? new Date(formData.lmp) : new Date())
+                                    : (formData.dob || new Date())
+                            }
                             mode="date"
                             display="spinner"
                             onChange={(event, selectedDate) => {
                                 setShowDatePicker(false); // Close the picker
 
-                                if (selectedDate) {
+                                // Only update if they actually picked a date (prevents crash on cancel)
+                                if (selectedDate && event.type !== "dismissed") {
                                     const year = selectedDate.getFullYear();
-                                    const month = String(selectedDate.getMonth() + 1).padStart(2, '0'); // Months are 0-indexed
-                                    const day = String(selectedDate.getDate()).padStart(2, '0');
+                                    const month = String(selectedDate.getMonth() + 1).padStart(2, "0");
+                                    const day = String(selectedDate.getDate()).padStart(2, "0");
 
                                     const dateString = `${year}-${month}-${day}`;
 
-                                    if (datePickerTarget === "lmp" ) {
-                                        // Update ONLY LMP
+                                    if (datePickerTarget === "lmp") {
                                         updateField("lmp", dateString);
                                     } else {
-                                        // Update DOB and the display string
                                         updateField("dob", selectedDate);
                                         updateField("dobString", dateString);
                                     }
@@ -377,7 +633,17 @@ export default function Register() {
                                 onChangeText={(val) => updateField("ashaId", sanitizeAlphanumeric(val))}
                             />
                             <RequiredLabel text="Assigned Wards" />
-                            <TextInput placeholder="(Separate by comma)" style={styles.input} keyboardType="number-pad" onChangeText={(val) => updateField("assignedWard", val)} />
+                            <TextInput
+                                placeholder="(Separate by comma)"
+                                style={styles.input}
+                                keyboardType="number-pad"
+                                value={formData.assignedWard}
+                                onChangeText={(val) => {
+                                    // Blocks letters, allows numbers and commas on laptop
+                                    const filtered = val.replace(/[^0-9,]/g, '');
+                                    updateField("assignedWard", filtered);
+                                }}
+                            />
                             <RequiredLabel text="PHC (Primary Health Centre)" />
                             <TextInput style={styles.input} onChangeText={(val) => updateField("phc", val)} />
                             <RequiredLabel text="Supervisor Name" />
@@ -409,9 +675,18 @@ export default function Register() {
                                 onChangeText={(val) => updateField("centerId", sanitizeAlphanumeric(val))}
                             />
                             <RequiredLabel text="Center Number" />
-                            <TextInput  style={styles.input} keyboardType="number-pad" onChangeText={(val) => updateField("awcId", val)} />
+                            <TextInput
+                                style={styles.input}
+                                keyboardType="number-pad"
+                                value={formData.awcId}
+                                onChangeText={(val) => {
+                                    // Blocks everything except numbers on laptop
+                                    const numeric = val.replace(/[^0-9]/g, '');
+                                    updateField("awcId", numeric);
+                                }}
+                            />
                             <RequiredLabel text="Ward Number" />
-                            <TextInput style={styles.input} keyboardType="number-pad" onChangeText={(val) => updateField("wardNo", val)} />
+                            <TextInput style={styles.input} keyboardType="number-pad" value={formData.wardNo} onChangeText={(val) => { const numericValue= val.replace(/[^0-9]/g, '');updateField("wardNo", numericValue);}} />
                             <RequiredLabel text="Ward Name" />
                             <TextInput style={styles.input} onChangeText={(val) => updateField("wardName", val)} />
                             <RequiredLabel text="Assigned Area" />
@@ -436,7 +711,7 @@ export default function Register() {
                             <TextInput
                                 placeholder="(Separate by comma)"
                                 style={styles.input}
-                                keyboardType="default" // Use default so the comma is visible on the keyboard
+                                keyboardType="number-pad" // Use default so the comma is visible on the keyboard
                                 value={formData.assignedWard} // Ensure the field is controlled
                                 onChangeText={(val) => {
                                     const filtered = val.replace(/[^0-9,]/g, '');
@@ -465,20 +740,53 @@ export default function Register() {
                             <TextInput style={styles.input} onChangeText={(val) => updateField("designation", val)} />
                             <RequiredLabel text="Reporting Authority"/>
                             <View style={styles.pickerContainer}>
-                                <Picker
-                                    selectedValue={formData.reportingAuth}
-                                    onValueChange={(itemValue) => updateField("reportingAuth", itemValue)}
-                                >
-                                    {reportingAuthorities.map((authority, index) => (
-                                        <Picker.Item
-                                            key={index}
-                                            label={authority}
-                                            value={authority === "Select Authority" ? "" : authority}
-                                            enabled={index !== 0} // Disables the "Select" placeholder
-                                            color={index === 0 ? "#999" : "#000"}
-                                        />
-                                    ))}
-                                </Picker>
+                                {Platform.OS === "web" ? (
+                                    /* --- 💻 LAPTOP / WEB VIEW --- */
+                                    <select
+                                        value={formData.reportingAuth}
+                                        onChange={(e: any) => updateField("reportingAuth", e.target.value)}
+                                        style={{
+                                            width: "100%",
+                                            height: 50,
+                                            padding: "0 15px",
+                                            borderRadius: 10,
+                                            border: "none", // View parent handles the border
+                                            backgroundColor: "transparent",
+                                            fontSize: 16,
+                                            fontFamily: "inherit",
+                                            cursor: "pointer",
+                                            outline: "none",
+                                            color: formData.reportingAuth === "" ? "#999" : "#000",
+                                        }}
+                                    >
+                                        {reportingAuthorities.map((authority, index) => (
+                                            <option
+                                                key={index}
+                                                value={index === 0 ? "" : authority}
+                                                disabled={index === 0}
+                                                style={{ color: "#000" }}
+                                            >
+                                                {authority}
+                                            </option>
+                                        ))}
+                                    </select>
+                                ) : (
+                                    /* --- 📱 MOBILE VIEW --- */
+                                    <Picker
+                                        selectedValue={formData.reportingAuth}
+                                        onValueChange={(itemValue) => updateField("reportingAuth", itemValue)}
+                                    >
+                                        {reportingAuthorities.map((authority, index) => (
+                                            <Picker.Item
+                                                key={index}
+                                                label={authority}
+                                                value={index === 0 ? "" : authority}
+                                                enabled={index !== 0}
+                                                color={index === 0 ? "#999" : "#000"}
+                                            />
+                                        ))}
+                                    </Picker>
+                                )}
                             </View>
                         </>
                     )}
@@ -493,16 +801,45 @@ export default function Register() {
                             <RequiredLabel text="Guardian's Mobile Number" />
                             <View style={styles.row}>
                                 <View style={styles.countryPicker}>
-                                    <Picker
-                                        selectedValue={formData.guardianCountryCode} // Use guardian's country code state
-                                        onValueChange={(val) => updateField("guardianCountryCode", val)}
-                                    >
-                                        {Object.keys(countryCodeRules).map(code => (
-                                            <Picker.Item key={code} label={code} value={code} />
-                                        ))}
-                                    </Picker>
+                                    {Platform.OS === "web" ? (
+                                        <select
+                                            value={formData.guardianCountryCode}
+                                            onChange={(e: any) => updateField("guardianCountryCode", e.target.value)}
+                                            style={{
+                                                width: '90%',
+                                                height: '100%',
+                                                padding: '0 30px 0 10px',
+                                                borderRadius: 10,
+                                                textAlign: 'center',
+                                                border: 'none',
+                                                backgroundColor: 'transparent',
+                                                fontSize: 16,
+                                                fontFamily: 'inherit', // ⬅️ Fixes the font
+                                                cursor: 'pointer',
+                                                outline: 'none',
+                                                // 🛑 This is the standard way to show the triangle
+                                                appearance: 'auto',
+                                                color: '#000',
+                                            }}
+                                        >
+                                            {Object.keys(countryCodeRules).map(code => (
+                                                <option key={code} value={code} style={{ color: '#000' }}>
+                                                    {code}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    ) : (
+                                        /* ... your Mobile Picker code ... */
+                                        <Picker
+                                            selectedValue={formData.guardianCountryCode}
+                                            onValueChange={(val) => updateField("guardianCountryCode", val)}
+                                        >
+                                            {Object.keys(countryCodeRules).map(code => (
+                                                <Picker.Item key={code} label={code} value={code} />
+                                            ))}
+                                        </Picker>
+                                    )}
                                 </View>
-
                                 <TextInput
                                     placeholder="Guardian's Number"
                                     style={[styles.input, styles.flexInput, { marginBottom: 0 }]}
@@ -527,56 +864,99 @@ export default function Register() {
                             <RequiredLabel text="Are you currently pregnant?" />
                             <View style={[
                                 styles.pickerContainer,
-                                formData.pregnancyStatus === "" && { borderColor: 'red' } // Highlighting red if not selected
+                                formData.pregnancyStatus === "" && { borderColor: 'red' }
                             ]}>
-                                <Picker
-                                    selectedValue={formData.pregnancyStatus}
-                                    onValueChange={(val) => updateField("pregnancyStatus", val)}
-                                >
-                                    {/* The first item acts as the mandatory placeholder */}
-                                    <Picker.Item label="-Select-" value="" color="#999" />
-                                    <Picker.Item label="Yes" value="Pregnant" />
-                                    <Picker.Item label="No" value="Not Pregnant" />
-                                </Picker>
+                                {Platform.OS === "web" ? (
+                                    /* --- 💻 LAPTOP / WEB VIEW --- */
+                                    <select
+                                        value={formData.pregnancyStatus}
+                                        onChange={(e: any) => updateField("pregnancyStatus", e.target.value)}
+                                        style={{
+                                            width: "100%",
+                                            height: 50,
+                                            padding: "0 15px",
+                                            borderRadius: 10,
+                                            border: "none",
+                                            backgroundColor: "transparent",
+                                            fontSize: 16,
+                                            fontFamily: "inherit",
+                                            cursor: "pointer",
+                                            outline: "none",
+                                            appearance: "auto", // ⬅️ Shows the dropdown arrow triangle on laptop
+                                            // 🛑 Dynamic color: #999 when no selection is made
+                                            color: formData.pregnancyStatus === "" ? "#999" : "#000",
+                                        }}
+                                    >
+                                        <option value="" style={{ color: "#999" }}>-Select-</option>
+                                        <option value="Pregnant" style={{ color: "#000" }}>Yes</option>
+                                        <option value="Not Pregnant" style={{ color: "#000" }}>No</option>
+                                    </select>
+                                ) : (
+                                    /* --- 📱 MOBILE VIEW --- */
+                                    <Picker
+                                        selectedValue={formData.pregnancyStatus}
+                                        onValueChange={(val) => updateField("pregnancyStatus", val)}
+                                    >
+                                        <Picker.Item label="-Select-" value="" color="#999" />
+                                        <Picker.Item label="Yes" value="Pregnant" color="#000" />
+                                        <Picker.Item label="No" value="Not Pregnant" color="#000" />
+                                    </Picker>
+                                )}
                             </View>
 
-                            {/* Error message shown only if the user hasn't made a choice */}
+                            {/* Error message logic */}
                             {formData.pregnancyStatus === "" && (
                                 <Text style={[styles.errorText, { marginTop: 5 }]}>
-                                    Please select your pregnancy status.
+                                    Please select your current pregnancy status.
                                 </Text>
                             )}
 
                             {/* --- IF PREGNANT: Show LMP, Trimester and Anganwadi Report --- */}
                             {formData.pregnancyStatus === "Pregnant" && (
                                 <>
+
                                     <RequiredLabel text="Last Menstrual Period (LMP)"/>
-                                    <TouchableOpacity
-                                        style={styles.input}
-                                        onPress={() => {
-                                            setDatePickerTarget("lmp");
-                                            setShowDatePicker(true);
-                                        }}
-                                    >
-                                        <Text style={{ color: formData.lmp ? "#000" : "#999" }}>
-                                            {formData.lmp ? `LMP: ${formData.lmp}` : "Select LMP Date"}
-                                        </Text>
-                                    </TouchableOpacity>
-                                    <RequiredLabel text="Trimester" />
-                                    <View style={[
-                                        styles.pickerContainer,
-                                        formData.trimester === "" && { borderColor: 'red' }
-                                    ]}>
-                                        <Picker
-                                            selectedValue={formData.trimester}
-                                            onValueChange={(val) => updateField("trimester", val)}
+
+                                    {Platform.OS === "web" ? (
+                                        /* --- 💻 LAPTOP / WEB DATE PICKER --- */
+                                        // @ts-ignore
+                                        <input
+                                            type="date"
+                                            value={formData.lmp || ""}
+                                            onChange={(e: any) => {
+                                                const dateString = e.target.value; // Returns format "YYYY-MM-DD"
+                                                if (dateString) {
+                                                    // Update only the LMP field
+                                                    updateField("lmp", dateString);
+                                                }
+                                            }}
+                                            style={{
+                                                padding: 15,
+                                                borderRadius: 10,
+                                                borderWidth: 1,
+                                                borderColor: "#ccc",
+                                                backgroundColor: "white",
+                                                fontSize: 16,
+                                                fontFamily: "inherit",
+                                                width: "100%",
+                                                marginBottom: 15,
+                                                boxSizing: "border-box",
+                                            }}
+                                        />
+                                    ) : (
+                                        /* --- 📱 MOBILE DATE PICKER BUTTON --- */
+                                        <TouchableOpacity
+                                            style={styles.input}
+                                            onPress={() => {
+                                                setDatePickerTarget("lmp");
+                                                setShowDatePicker(true);
+                                            }}
                                         >
-                                            <Picker.Item label="-Select-" value="" color="#999" />
-                                            <Picker.Item label="1st Trimester" value="1st Trimester" />
-                                            <Picker.Item label="2nd Trimester" value="2nd Trimester" />
-                                            <Picker.Item label="3rd Trimester" value="3rd Trimester" />
-                                        </Picker>
-                                    </View>
+                                            <Text style={{ color: formData.lmp ? "#000" : "#999" }}>
+                                                {formData.lmp ? `LMP: ${formData.lmp}` : "Select LMP Date"}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    )}
 
                                     {/* Validation Error Message */}
                                     {formData.trimester === "" && (
@@ -590,22 +970,45 @@ export default function Register() {
                                         styles.pickerContainer,
                                         formData.isAnganwadiReported === "" && { borderColor: 'red' }
                                     ]}>
-                                        <Picker
-                                            selectedValue={formData.isAnganwadiReported}
-                                            onValueChange={(val) => updateField("isAnganwadiReported", val)}
-                                        >
-                                            <Picker.Item label="-Select-" value="" color="#999" />
-                                            <Picker.Item label="Yes" value="Yes" />
-                                            <Picker.Item label="No" value="No" />
-                                        </Picker>
+                                        {Platform.OS === "web" ? (
+                                            /* --- 💻 LAPTOP / WEB VIEW --- */
+                                            <select
+                                                value={formData.isAnganwadiReported}
+                                                onChange={(e: any) => updateField("isAnganwadiReported", e.target.value)}
+                                                style={{
+                                                    width: "100%",
+                                                    height: 50,
+                                                    padding: "0 15px",
+                                                    borderRadius: 10,
+                                                    border: "none",
+                                                    backgroundColor: "transparent",
+                                                    fontSize: 16,
+                                                    fontFamily: "inherit",
+                                                    cursor: "pointer",
+                                                    outline: "none",
+                                                    appearance: "auto",
+                                                    // 🛑 This line makes the text #999 when "-Select-" is active,
+                                                    // but turns it black (#000) once a choice is made.
+                                                    color: formData.isAnganwadiReported === "" ? "#999" : "#000",
+                                                }}
+                                            >
+                                                {/* The placeholder option */}
+                                                <option value="" style={{ color: "#999" }}>-Select-</option>
+                                                <option value="Yes" style={{ color: "#000" }}>Yes</option>
+                                                <option value="No" style={{ color: "#000" }}>No</option>
+                                            </select>
+                                        ) : (
+                                            /* --- 📱 MOBILE VIEW --- */
+                                            <Picker
+                                                selectedValue={formData.isAnganwadiReported}
+                                                onValueChange={(val) => updateField("isAnganwadiReported", val)}
+                                            >
+                                                <Picker.Item label="-Select-" value="" color="#999" />
+                                                <Picker.Item label="Yes" value="Yes" color="#000" />
+                                                <Picker.Item label="No" value="No" color="#000" />
+                                            </Picker>
+                                        )}
                                     </View>
-
-                                    {/* Validation Error Message */}
-                                    {formData.isAnganwadiReported === "" && (
-                                        <Text style={[styles.errorText, { marginTop: 5 }]}>
-                                            Please confirm if this has been reported to the Anganwadi.
-                                        </Text>
-                                    )}
                                 </>
                             )}
 
@@ -615,17 +1018,45 @@ export default function Register() {
                                 styles.pickerContainer,
                                 formData.hasChildren === "" && { borderColor: 'red' }
                             ]}>
-                                <Picker
-                                    selectedValue={formData.hasChildren}
-                                    onValueChange={(val) => updateField("hasChildren", val)}
-                                >
-                                    <Picker.Item label="-Select-" value="" color="#999" />
-                                    <Picker.Item label="Yes" value="Yes" />
-                                    <Picker.Item label="No" value="No" />
-                                </Picker>
+                                {Platform.OS === "web" ? (
+                                    /* --- 💻 LAPTOP / WEB VIEW --- */
+                                    <select
+                                        value={formData.hasChildren}
+                                        onChange={(e: any) => updateField("hasChildren", e.target.value)}
+                                        style={{
+                                            width: "100%",
+                                            height: 50,
+                                            padding: "0 15px",
+                                            borderRadius: 10,
+                                            border: "none",
+                                            backgroundColor: "transparent",
+                                            fontSize: 16,
+                                            fontFamily: "inherit",
+                                            cursor: "pointer",
+                                            outline: "none",
+                                            appearance: "auto",
+                                            // 🛑 Dynamic color logic for Laptop
+                                            color: formData.hasChildren === "" ? "#999" : "#000",
+                                        }}
+                                    >
+                                        <option value="" style={{ color: "#999" }}>-Select-</option>
+                                        <option value="Yes" style={{ color: "#000" }}>Yes</option>
+                                        <option value="No" style={{ color: "#000" }}>No</option>
+                                    </select>
+                                ) : (
+                                    /* --- 📱 MOBILE VIEW --- */
+                                    <Picker
+                                        selectedValue={formData.hasChildren}
+                                        onValueChange={(val) => updateField("hasChildren", val)}
+                                    >
+                                        <Picker.Item label="-Select-" value="" color="#999" />
+                                        <Picker.Item label="Yes" value="Yes" color="#000" />
+                                        <Picker.Item label="No" value="No" color="#000" />
+                                    </Picker>
+                                )}
                             </View>
 
-                            {/* Validation Error Message */}
+                            {/* Error message logic */}
                             {formData.hasChildren === "" && (
                                 <Text style={[styles.errorText, { marginTop: 5 }]}>
                                     Please confirm if you have children.
@@ -662,15 +1093,46 @@ export default function Register() {
                                                     />
 
                                                     <RequiredLabel text="Vaccinated?"/>
-                                                    <View style={[styles.pickerContainer, child.vaccinated === "Not Selected" && { borderColor: 'red'}]}>
-                                                        <Picker
-                                                            selectedValue={child.vaccinated}
-                                                            onValueChange={(val) => updateChildField(index, "vaccinated", val)}
-                                                        >
-                                                            <Picker.Item label="-Select-" value="Not Selected" color="#999"/>
-                                                            <Picker.Item label="Yes" value="Yes" />
-                                                            <Picker.Item label="No" value="No" />
-                                                        </Picker>
+                                                    <View style={[
+                                                        styles.pickerContainer,
+                                                        child.vaccinated === "Not Selected" && { borderColor: 'red'}
+                                                    ]}>
+                                                        {Platform.OS === "web" ? (
+                                                            /* --- 💻 LAPTOP / WEB VIEW --- */
+                                                            <select
+                                                                value={child.vaccinated}
+                                                                onChange={(e: any) => updateChildField(index, "vaccinated", e.target.value)}
+                                                                style={{
+                                                                    width: "100%",
+                                                                    height: 50,
+                                                                    padding: "0 15px",
+                                                                    borderRadius: 10,
+                                                                    border: "none",
+                                                                    backgroundColor: "transparent",
+                                                                    fontSize: 16,
+                                                                    fontFamily: "inherit",
+                                                                    cursor: "pointer",
+                                                                    outline: "none",
+                                                                    appearance: "auto",
+                                                                    // 🛑 Dynamic color logic: faded if "Not Selected"
+                                                                    color: child.vaccinated === "Not Selected" ? "#999" : "#000",
+                                                                }}
+                                                            >
+                                                                <option value="Not Selected" style={{ color: "#999" }}>-Select-</option>
+                                                                <option value="Yes" style={{ color: "#000" }}>Yes</option>
+                                                                <option value="No" style={{ color: "#000" }}>No</option>
+                                                            </select>
+                                                        ) : (
+                                                            /* --- 📱 MOBILE VIEW --- */
+                                                            <Picker
+                                                                selectedValue={child.vaccinated}
+                                                                onValueChange={(val) => updateChildField(index, "vaccinated", val)}
+                                                            >
+                                                                <Picker.Item label="-Select-" value="Not Selected" color="#999"/>
+                                                                <Picker.Item label="Yes" value="Yes" color="#000" />
+                                                                <Picker.Item label="No" value="No" color="#000" />
+                                                            </Picker>
+                                                        )}
                                                     </View>
                                                     {child.vaccinated === "Not Selected" && (
                                                         <Text style={[styles.errorText, { marginBottom: 10 }]}>
@@ -697,16 +1159,61 @@ export default function Register() {
                             {formData.rationCard.length > 0 && !isRationValid && <Text style={styles.warningText}>Ration card number must be exactly 10 digits</Text>}
                             {isRationValid && <Text style={styles.successText}>✓ Valid Ration Card number Format</Text>}
 
-                            <RequiredLabel text="Health Issues"/>
-                            <View style={styles.pickerContainer}>
-                                <Picker selectedValue={formData.healthIssues} onValueChange={(val) => updateField("healthIssues", val)}>
-                                    <Picker.Item label="None" value="None" />
-                                    <Picker.Item label="Anemia" value="Anemia" />
-                                    <Picker.Item label="Gestational Diabetes" value="Diabetes" />
-                                    <Picker.Item label="Hypertension" value="Diabetes" />
-                                    <Picker.Item label="Other" value="Other" />
-                                </Picker>
+                            <RequiredLabel text="Health Issues (If any)" />
+                            <View style={[
+                                styles.pickerContainer,
+                                formData.healthIssues === "" && { borderColor: 'red' }
+                            ]}>
+                                {Platform.OS === "web" ? (
+                                    /* --- 💻 LAPTOP / WEB VIEW --- */
+                                    <select
+                                        value={formData.healthIssues}
+                                        onChange={(e: any) => updateField("healthIssues", e.target.value)}
+                                        style={{
+                                            width: "100%",
+                                            height: 50,
+                                            padding: "0 15px",
+                                            borderRadius: 10,
+                                            border: "none",
+                                            backgroundColor: "transparent",
+                                            fontSize: 16,
+                                            fontFamily: "inherit",
+                                            cursor: "pointer",
+                                            outline: "none",
+                                            appearance: "auto", // ⬅️ Shows the dropdown arrow triangle on laptop
+                                            // 🛑 Dynamic color: #999 when no issue is selected
+                                            color: formData.healthIssues === "" ? "#999" : "#000",
+                                        }}
+                                    >
+                                        <option value="" style={{ color: "#999" }}>-Select-</option>
+                                        <option value="None" style={{ color: "#000" }}>None</option>
+                                        <option value="Anemia" style={{ color: "#000" }}>Anemia</option>
+                                        <option value="Hypertension" style={{ color: "#000" }}>Hypertension</option>
+                                        <option value="Gestational Diabetes" style={{ color: "#000" }}>Diabetes</option>
+                                        <option value="Other" style={{ color: "#000" }}>Other</option>
+                                    </select>
+                                ) : (
+                                    /* --- 📱 MOBILE VIEW --- */
+                                    <Picker
+                                        selectedValue={formData.healthIssues}
+                                        onValueChange={(val) => updateField("healthIssues", val)}
+                                    >
+                                        <Picker.Item label="-Select-" value="" color="#999" />
+                                        <Picker.Item label="None" value="None" color="#000" />
+                                        <Picker.Item label="Anemia" value="Anemia" color="#000" />
+                                        <Picker.Item label="Hypertension" value="Hypertension" color="#000" />
+                                        <Picker.Item label="Gestational Diabetes" value="Diabetes" color="#000" />
+                                        <Picker.Item label="Other" value="Other" color="#000" />
+                                    </Picker>
+                                )}
                             </View>
+
+                            {/* Error message logic */}
+                            {formData.healthIssues === "" && (
+                                <Text style={[styles.errorText, { marginTop: 5 }]}>
+                                    Please select a health status or choose 'None'.
+                                </Text>
+                            )}
                         </>
                     )}
                     <Text style={styles.sectionTitle}>4. Security</Text>
@@ -750,6 +1257,17 @@ export default function Register() {
                         <Text style={styles.registerButtonText}>REGISTER</Text>
                     </TouchableOpacity>
 
+                </View>
+                <View style={styles.loginLinkContainer}>
+                    <Text style={styles.loginText}>
+                        Already a user?{' '}
+                        <Text
+                            style={styles.linkText}
+                            onPress={() => router.push('/auth' as any)}
+                        >
+                            Login here
+                        </Text>
+                    </Text>
                 </View>
                 <Modal visible={modalVisible} animationType="slide" transparent={true}>
                     <View style={styles.modalContainer}>
@@ -835,4 +1353,22 @@ const styles = StyleSheet.create({
         marginBottom: 15,
         paddingHorizontal: 5,
     },
+    loginLinkContainer: {
+        marginTop: 25,
+        marginBottom: 40, // Extra space at the bottom for scrolling comfort
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    loginText: {
+        fontSize: 16,
+        color: '#333',
+    },
+    linkText: {
+        color: '#007AFF', // Standard "Link Blue"
+        fontWeight: 'bold',
+        textDecorationLine: 'underline',
+        // This makes the mouse cursor change on your laptop!
+        ...(Platform.OS === 'web' && { cursor: 'pointer' }),
+    },
+
 });
