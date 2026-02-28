@@ -1227,7 +1227,7 @@ export default function Register() {
                             {/* Error message logic */}
                             {formData.healthIssues === "" && (
                                 <Text style={[styles.errorText, { marginTop: 5 }]}>
-                                    Please select a health status or choose 'None'.
+                                    Please select a health status or choose None.
                                 </Text>
                             )}
                         </>

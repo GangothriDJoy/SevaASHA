@@ -29,8 +29,8 @@ export default function Auth() {
     const [errorMessage, setErrorMessage] = useState(""); // State to hold our error text
     const isRoleSelected = role !== "" && role !== "-Select-";
     const handleForgotPassword = async () => {
-        if (!formData.mobile) {
-            const msg = "Please enter your registered mobile number (email) first.";
+        if (!mobile) { // ✅ Use the 'mobile' state you defined
+            const msg = "Please enter your registered mobile number first.";
             Platform.OS === 'web' ? alert(msg) : Alert.alert("Error", msg);
             return;
         }
@@ -54,7 +54,13 @@ export default function Auth() {
         setHasAttempted(true);
         if(!role || role ===""){return;}
         if (!mobile || !password) {
-            Alert.alert("Error", "Please enter both mobile number and password.");
+            const msg = "Please enter both mobile number and password.";
+
+            if (Platform.OS === 'web') {
+                alert(msg); // 💻 Shows on Laptop
+            } else {
+                Alert.alert("Error", msg); // 📱 Shows on Mobile
+            }
             return;
         }
 
@@ -112,16 +118,23 @@ export default function Auth() {
                 });
 
             } else {
-                Alert.alert("Error", "User profile not found in database.");
+                const msg = "User profile not found in database.";
+                Platform.OS === 'web' ? alert(msg) : Alert.alert("Error", msg);
             }
 
         } catch (error: any) {
             console.error("Login Error:", error.code);
-            Alert.alert("Login Failed", "Incorrect mobile number or password.");
-        }
-        if (!mobile || !password) {
-            Alert.alert("Error", "Please enter both mobile number and password.");
-            return;
+
+            const errorTitle = "Login Failed";
+            const errorMessage = "Incorrect mobile number or password.";
+
+            if (Platform.OS === 'web') {
+                // This is what makes it show up on your Laptop
+                alert(`${errorTitle}: ${errorMessage}`);
+            } else {
+                // This keeps it working on the Mobile Phone
+                Alert.alert(errorTitle, errorMessage);
+            }
         }
 };
 
