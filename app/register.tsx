@@ -203,7 +203,7 @@ export default function Register() {
 
             // 4. Save ALL their form details into our Firestore Database
             const userProfileData = {
-                ...formData, // Copies everything from the form (Aadhaar, address, etc.)
+                ...formData,
                 uid: user.uid,
                 authEmail: authEmail,
                 name: fullName,

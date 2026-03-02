@@ -70,7 +70,6 @@ export default function Auth() {
         const authEmail = `${cleanMobile}@sevaasha.com`;
 
         try {
-            // 3. Authenticate with Firebase Auth
             const userCredential = await signInWithEmailAndPassword(auth, authEmail, cleanPassword);
             const user = userCredential.user;
 
@@ -123,7 +122,7 @@ export default function Auth() {
             }
 
         } catch (error: any) {
-            console.error("Login Error:", error.code);
+            //console.error("Login Error:", error.code);
 
             const errorTitle = "Login Failed";
             const errorMessage = "Incorrect mobile number or password.";

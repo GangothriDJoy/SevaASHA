@@ -18,13 +18,18 @@ export default function UserDetail() {
     const router = useRouter();
     const params = useLocalSearchParams();
     const userId = Array.isArray(params.userId) ? params.userId : params.userId;const collectionName = Array.isArray(params.collection) ? params.collection : params.collection;
-    const [userData, setUserData] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
+    const [userData, setUserData] = useState<any>({
+        firstName: "",
+        lastName: "",
+        role: "",
+        mobile: "",
+        registrationDate: "",
+        status: "Pending"
+    });const [loading, setLoading] = useState(true);
     const safeUserId = String(userId || "");
     const safeCollection = String(collectionName || "users");
-// Create clean, guaranteed string versions
-    const safeId = userId ?? "";
-    const safeCol = collectionName ?? "users";
+    //const safeId = userId ?? "";
+    //const safeCol = collectionName ?? "users";
     // --- 2. NOTIFICATION HELPER ---
     const sendNotification = (mobile: string, message: string) => {
         console.log(`Notification to ${mobile}: ${message}`);
@@ -66,7 +71,7 @@ export default function UserDetail() {
     // --- 4. APPROVE / REJECT LOGIC ---
     const handleFinalDecision = async (status: 'Approved' | 'Rejected') => {
         try {
-            const userRef = doc(db, safeCol as string, safeId as string);
+            const userRef = doc(db, safeCollection as string, safeUserId as string);
             if (status === 'Approved') {
                 await updateDoc(userRef, { status: 'Approved' });
                 sendNotification(userData.mobile, "Your SevaASHA account has been Approved!");
@@ -79,9 +84,9 @@ export default function UserDetail() {
             const successMsg = `User has been ${status} successfully.`;
             if (Platform.OS === 'web') {
                 alert(successMsg);
-                router.back();
+                router.replace("/dashboard");
             } else {
-                Alert.alert("Success", successMsg, [{ text: "OK", onPress: () => router.back() }]);
+                Alert.alert("Success", successMsg, [{ text: "OK", onPress: () => router.replace("//dashboard") }]);
             }
         } catch (error) {
             console.error("Decision Error:", error);
@@ -115,7 +120,7 @@ export default function UserDetail() {
                 <View style={styles.detailBox}>
                     <DetailItem
                         label="Full Name"
-                        value={userData?.firstName ? `${userData.firstName} ${userData.lastName}` : "Loading..."}
+                        value={userData?.fullName || (userData?.firstName ? `${userData.firstName} ${userData.lastName}` : "Name not found")}
                     />
                     <DetailItem label="Mobile Number" value={userData.mobile} />
                     <DetailItem label="Role" value={userData.role} />
