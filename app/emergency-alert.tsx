@@ -59,7 +59,7 @@ export default function EmergencyAlert() {
             }
 
             // 4. Save to Firestore
-            await addDoc(collection(db, "emergencies"), {
+            await addDoc(collection(db, "emergency"), {
                 workerId: workerMobile,
                 latitude: location.coords.latitude,
                 longitude: location.coords.longitude,

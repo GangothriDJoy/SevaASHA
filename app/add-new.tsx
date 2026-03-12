@@ -1,362 +1,544 @@
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Alert, ActivityIndicator } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Alert, ActivityIndicator, Platform } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useState, useEffect } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { db } from "../firebaseConfig";
-import { collection, addDoc, serverTimestamp, query, where, getDocs } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, query, where, getDocs, setDoc, doc, deleteDoc } from "firebase/firestore";
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 const CHRONIC_OPTIONS = ["Diabetes", "Hypertension", "Thyroid", "Heart Disease"];
 
+// Helper function to calculate pregnancy month from LMP date
+const calculatePregnancyMonth = (lmpDateString: string | null): number | null => {
+    if (!lmpDateString) return null;
+    const lmpDate = new Date(lmpDateString);
+    const today = new Date();
+
+    const diffTime = Math.abs(today.getTime() - lmpDate.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    let month = Math.ceil(diffDays / 30);
+
+    if (month > 10) month = 10;
+    if (month < 0) month = 0;
+
+    return month;
+};
+
 export default function AddNew() {
     const router = useRouter();
     const params = useLocalSearchParams();
-    const [loading, setLoading] = useState(false);
-    const [step, setStep] = useState(1);
-
-    const [formData, setFormData] = useState({
-        houseNumber: "",
-        totalMembers: "",
-        members: [] as Array<{
-            name: string;
-            age: string;
-            gender: string;
-            relation: string;
-            bloodPressure: string;
-            sugarLevel: string;
-            cholesterol: string;
-            chronicConditions: string[];
-        }>,
-        summary: {
-            disabledCount: "0",
-            bedriddenCount: "0",
-            isPregnant: false,
-            lmpDate: new Date().toISOString(),
-            isBreastfeeding: false,
-            chronicConditions: [] as string[]
-        }
-    });
 
     const workerMobile = String(params.mobile || "").trim();
     const workerRole = String(params.role || "ASHA Worker").trim();
-    const workerName = String(params.name || "").trim();
 
-    const loadPreviousHouseData = async (houseNo: string) => {
-        if (!houseNo || !houseNo.trim()) return;
+    const [step, setStep] = useState(1);
+    const [loading, setLoading] = useState(false);
+    const [houseId, setHouseId] = useState("");
+    const [existingResidents, setExistingResidents] = useState<any[]>([]);
+
+    const [showDatePickerMap, setShowDatePickerMap] = useState<{[key: number]: boolean}>({});
+    const [attemptedSubmit, setAttemptedSubmit] = useState(false);
+
+    const [formData, setFormData] = useState({
+        members: [] as any[]
+    });
+
+    const fetchHouseData = async () => {
+        if (!houseId.trim()) {
+            Alert.alert("Required", "Please enter a House ID.");
+            return;
+        }
         setLoading(true);
         try {
-            const visitsQuery = query(
-                collection(db, "household_visits"),
-                where("houseId", "==", houseNo.trim())
+            const q = query(
+                collection(db, "household_members"),
+                where("houseId", "==", houseId.trim())
             );
-            const visitsSnapshot = await getDocs(visitsQuery);
-            if (visitsSnapshot.empty) {
-                setLoading(false);
-                return;
-            }
-            const sorted = visitsSnapshot.docs.sort((a, b) => {
-                const ta = (a.data() as any).createdAt?.toMillis?.() ?? 0;
-                const tb = (b.data() as any).createdAt?.toMillis?.() ?? 0;
-                return tb - ta;
-            });
-            const visitDoc = sorted[0].data() as any;
-            const previousMembers = Array.isArray(visitDoc.members) ? visitDoc.members : [];
-            const previousSummary = visitDoc.summary || {};
-            const houseChronic = previousSummary.chronicConditions || [];
-
-            const mappedMembers = previousMembers.map((m: any, index: number) => ({
-                name: m.name || "",
-                age: m.age || "",
-                gender: m.gender || "Female",
-                relation: index === 0 ? "Head of House" : (m.relation || m.relationToHead || ""),
-                bloodPressure: m.bloodPressure || "",
-                sugarLevel: m.sugarLevel || "",
-                cholesterol: m.cholesterol || "",
-                chronicConditions: Array.isArray(m.chronicConditions) ? m.chronicConditions : (houseChronic.length ? [...houseChronic] : [])
-            }));
-
-            setFormData(prev => ({
-                ...prev,
-                houseNumber: visitDoc.houseId || houseNo,
-                totalMembers: String(visitDoc.totalMembers || mappedMembers.length || prev.totalMembers),
-                members: mappedMembers.length ? mappedMembers : prev.members,
-                summary: {
-                    ...prev.summary,
-                    disabledCount: String(previousSummary.disabledCount ?? prev.summary.disabledCount),
-                    bedriddenCount: String(previousSummary.bedriddenCount ?? prev.summary.bedriddenCount),
-                    isPregnant: !!previousSummary.isPregnant,
-                    lmpDate: previousSummary.lmpDate || prev.summary.lmpDate,
-                    isBreastfeeding: !!previousSummary.isBreastfeeding,
-                    chronicConditions: previousSummary.chronicConditions || prev.summary.chronicConditions || []
-                }
-            }));
-            setStep(1.5);
-            Alert.alert(
-                "Previous Month Loaded",
-                "Last saved data pre-filled. Update BP, Sugar, and add any new diseases for members."
-            );
-        } catch (e) {
-            console.error("Error loading previous house data for AddNew", e);
+            const snapshot = await getDocs(q);
+            const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setExistingResidents(list);
+        } catch (error) {
+            console.error("Error fetching house:", error);
+            Alert.alert("Error", "Could not fetch household data.");
         } finally {
             setLoading(false);
         }
     };
 
-    const checkExistingHouse = async (houseNo: string) => {
-        if (!houseNo || !houseNo.trim()) return;
-        try {
-            const q = query(
-                collection(db, "household_visits"),
-                where("houseId", "==", houseNo.trim())
-            );
-            const snapshot = await getDocs(q);
-            if (!snapshot.empty) {
-                await loadPreviousHouseData(houseNo);
-            }
-        } catch (e) {
-            console.error("Error checking existing house in AddNew", e);
-        }
-    };
+    const generateBlankMember = () => ({
+        id: "",
+        name: "",
+        age: "",
+        gender: "",
+        relation: "",
+        mobile: "",
+        aadhaar: "",
+        maritalStatus: "",
+        weight: "",
+        bloodPressure: "",
+        sugarLevel: "",
+        cholesterol: "",
+        chronicConditions: [],
+        isPregnant: false,
+        lactating: false,
+        isBedridden: false,
+        lmpDate: null,
+        pregnancyMonth: null
+    });
 
-    useEffect(() => {
-        const houseId = String(params.houseId || "").trim();
-        if (houseId) {
-            setFormData(prev => ({ ...prev, houseNumber: houseId }));
-            loadPreviousHouseData(houseId);
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [params.houseId]);
+    const handleProceedToAddEdit = () => {
+        const blankTemplate = generateBlankMember();
 
-    const prepareMembers = () => {
-        const count = parseInt(formData.totalMembers);
-        if (isNaN(count) || count <= 0) {
-            Alert.alert("Invalid", "Please enter a valid number of members.");
-            return;
-        }
-        const updatedMembers = [...formData.members];
-        if (updatedMembers.length < count) {
-            const additionalNeeded = count - updatedMembers.length;
-            const newMembers = Array.from({ length: additionalNeeded }, (_, i) => ({
-                name: "", age: "", gender: "Female",
-                relation: "",
-                bloodPressure: "", sugarLevel: "", cholesterol: "",
-                chronicConditions: [] as string[]
-            }));
-            setFormData({ ...formData, members: [...updatedMembers, ...newMembers] });
-        } else if (updatedMembers.length > count) {
-            // If they decrease the number, trim the list
-            setFormData({ ...formData, members: updatedMembers.slice(0, count) });
-        }
-
-        setStep(1.5);
-        const initialMembers = Array.from({ length: count }, (_, i) => ({
-            name: "", age: "", gender: "Female",
-            relation: i === 0 ? "Head of House" : "",
-            bloodPressure: "", sugarLevel: "", cholesterol: "",
-            chronicConditions: [] as string[]
+        const formattedExisting = existingResidents.map(res => ({
+            ...blankTemplate,
+            ...res,
+            chronicConditions: res.chronicConditions || [],
+            pregnancyMonth: res.lmpDate ? calculatePregnancyMonth(res.lmpDate) : null
         }));
-        setFormData({ ...formData, members: initialMembers });
-        setStep(1.5);
+
+        setFormData({ members: [...formattedExisting, generateBlankMember()] });
+        setStep(2);
+        setAttemptedSubmit(false);
     };
 
-    const updateMember = (index: number, field: string, value: string | string[]) => {
-        const updatedMembers = [...formData.members];
-        (updatedMembers[index] as any)[field] = value;
-        setFormData({ ...formData, members: updatedMembers });
+    const updateMember = (index: number, field: string, value: any) => {
+        const updated = [...formData.members];
+
+        if (field === 'mobile') {
+            const cleaned = value.replace(/\D/g, '');
+            value = cleaned.substring(0, 10);
+        }
+
+        updated[index][field] = value;
+        setFormData({ members: updated });
     };
 
-    const toggleMemberChronic = (memberIndex: number, condition: string) => {
-        const updatedMembers = [...formData.members];
-        const arr = updatedMembers[memberIndex].chronicConditions || [];
-        const next = arr.includes(condition) ? arr.filter(c => c !== condition) : [...arr, condition];
-        updatedMembers[memberIndex] = { ...updatedMembers[memberIndex], chronicConditions: next };
-        setFormData({ ...formData, members: updatedMembers });
+    const updatePregnancyLMP = (index: number, selectedDate: Date) => {
+        const isoDate = selectedDate.toISOString();
+        const calculatedMonth = calculatePregnancyMonth(isoDate);
+
+        const updated = [...formData.members];
+        updated[index]['lmpDate'] = isoDate;
+        updated[index]['pregnancyMonth'] = calculatedMonth;
+        if (isoDate) updated[index]['lactating'] = false;
+
+        setFormData({ members: updated });
     };
 
-    const toggleChronicCondition = (condition: string) => {
-        const current = [...formData.summary.chronicConditions];
-        const next = current.includes(condition) ? current.filter(c => c !== condition) : [...current, condition];
-        setFormData({ ...formData, summary: { ...formData.summary, chronicConditions: next } });
+    const toggleCondition = (index: number, condition: string) => {
+        const updated = [...formData.members];
+        const conditions = updated[index].chronicConditions || [];
+        if (conditions.includes(condition)) {
+            updated[index].chronicConditions = conditions.filter((c: string) => c !== condition);
+        } else {
+            updated[index].chronicConditions = [...conditions, condition];
+        }
+        setFormData({ members: updated });
+    };
+
+    const removeMemberSlot = (index: number) => {
+        const memberToDelete = formData.members[index];
+
+        const confirmDelete = async () => {
+            try {
+                if (memberToDelete.id) {
+                    setLoading(true);
+                    await deleteDoc(doc(db, "household_members", memberToDelete.id));
+                    setLoading(false);
+                }
+
+                const updated = formData.members.filter((_, i) => i !== index);
+                setFormData({ members: updated });
+
+                if (updated.length === 0) {
+                    setStep(1);
+                    fetchHouseData();
+                }
+            } catch (error) {
+                console.error("Error deleting member:", error);
+                Alert.alert("Error", "Could not delete this member from the database.");
+                setLoading(false);
+            }
+        };
+
+        if (Platform.OS === 'web') {
+            const confirmed = window.confirm(`Are you sure you want to permanently remove ${memberToDelete.name || "this member"}?`);
+            if (confirmed) confirmDelete();
+        } else {
+            Alert.alert(
+                "Delete Member",
+                `Are you sure you want to permanently remove ${memberToDelete.name || "this member"}?`,
+                [
+                    { text: "Cancel", style: "cancel" },
+                    { text: "Delete", style: "destructive", onPress: confirmDelete }
+                ]
+            );
+        }
+    };
+
+    const proceedToSummary = () => {
+        setAttemptedSubmit(true);
+
+        const mandatoryFields = ['name', 'age', 'gender', 'relation', 'mobile', 'weight', 'bloodPressure', 'sugarLevel'];
+
+        for (let i = 0; i < formData.members.length; i++) {
+            const m = formData.members[i];
+            const memberName = m.name.trim() || `Member ${i+1}`;
+
+            const hasEmptyField = mandatoryFields.some(field => {
+                const value = m[field];
+                return typeof value === 'string' ? !value.trim() : (value === null || value === undefined);
+            });
+
+            if (hasEmptyField) {
+                Alert.alert("Required", `Please provide Name, Age, Gender, Relation, Mobile, Weight, BP, Sugar for ${memberName}.`);
+                return;
+            }
+
+            if (m.mobile.length !== 10) {
+                Alert.alert("Invalid Mobile", `Mobile Number for ${memberName} must be 10 digits.`);
+                return;
+            }
+
+            if (m.isPregnant && !m.lmpDate) {
+                Alert.alert("Data Missing", `Please select the LMP date for ${memberName} to calculate pregnancy month.`);
+                return;
+            }
+        }
+
+        setStep(3);
     };
 
     const handleSave = async () => {
-        const incomplete = formData.members.some(m => !m.name || !m.age);
-        if (incomplete) {
-            Alert.alert("Invalid", "Please fill in all member details (Name, Age).");
-            return;
-        }
-        const hasChronic = formData.members.some(m => (m.chronicConditions || []).length > 0);
-        const missingHealth = formData.members.some(m => {
-            const chronic = m.chronicConditions || [];
-            const needsBpSugar = chronic.includes("Diabetes") || chronic.includes("Hypertension");
-            return needsBpSugar && (!m.bloodPressure?.trim() || !m.sugarLevel?.trim());
-        });
-        if (hasChronic && missingHealth) {
-            Alert.alert("Required", "Members with Diabetes/Hypertension must have BP and Sugar filled.");
-            return;
-        }
-        if (formData.summary.isPregnant && !formData.summary.lmpDate) {
-            Alert.alert("Required", "LMP Date is required when pregnancy is marked.");
-            return;
-        }
-
         setLoading(true);
         try {
-            const savePromises = formData.members.map((member) =>
-                addDoc(collection(db, "household_members"), {
+            const savePromises = formData.members.map((member) => {
+                const customId = member.id || `${houseId.trim()}_${member.name.trim()}`.toLowerCase().replace(/\s+/g, '_');
+                const memberRef = doc(db, "household_members", customId);
+
+                return setDoc(memberRef, {
                     ...member,
-                    relationToHead: member.relation,
-                    totalMembers: formData.totalMembers,
-                    houseId: formData.houseNumber.trim(),
+                    id: customId,
+                    houseId: houseId.trim(),
                     workerId: workerMobile,
-                    isPregnant: false,
-                    isBedridden: false,
-                    chronicConditions: member.chronicConditions || formData.summary.chronicConditions,
-                    createdAt: serverTimestamp(),
-                })
-            );
+                    updatedAt: serverTimestamp(),
+                }, { merge: true });
+            });
+
             await Promise.all(savePromises);
+
             await addDoc(collection(db, "household_visits"), {
-                houseId: formData.houseNumber.trim(),
+                houseId: houseId.trim(),
                 workerId: workerMobile,
-                totalMembers: formData.totalMembers,
                 members: formData.members,
-                summary: formData.summary,
                 createdAt: serverTimestamp(),
             });
-            setLoading(false);
-            router.replace({
-                pathname: "/dashboard",
-                params: { mobile: workerMobile, role: workerRole, name: workerName }
-            });
+
+            router.replace({ pathname: "/dashboard", params: { mobile: workerMobile, role: workerRole } });
         } catch (error) {
-            Alert.alert("Error", "Could not save survey.");
+            console.error("Save Error:", error);
+            Alert.alert("Error", "Could not save household data.");
+        } finally {
             setLoading(false);
         }
+    };
+
+    const pregnantMembers = formData.members.filter(m => m.isPregnant);
+    const breastfeedingMembers = formData.members.filter(m => m.lactating);
+    const bedriddenMembers = formData.members.filter(m => m.isBedridden);
+    const diseasedMembers = formData.members.filter(m => (m.chronicConditions?.length > 0));
+
+    const toggleDatePicker = (index: number, forceOpen: boolean = false) => {
+        if (forceOpen) {
+            setShowDatePickerMap(prev => ({ ...prev, [index]: true }));
+        } else {
+            setShowDatePickerMap(prev => ({ ...prev, [index]: !prev[index] }));
+        }
+    };
+
+    const hasError = (value: any) => {
+        return attemptedSubmit && (typeof value === 'string' ? !value.trim() : (value === null || value === undefined));
     };
 
     return (
         <ScrollView style={styles.container}>
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => step > 1 ? setStep(step === 1.5 ? 1 : 1.5) : router.back()}>
+                <TouchableOpacity onPress={() => step > 1 ? setStep(step - 1) : router.back()}>
                     <Ionicons name="arrow-back" size={24} color="white" />
                 </TouchableOpacity>
-                <Text style={styles.headerText}>Add New / Monthly Update (Step {step})</Text>
+                <Text style={styles.headerText}>Household Update (Step {step}/3)</Text>
             </View>
 
             <View style={styles.form}>
                 {step === 1 && (
                     <View>
-                        <Text style={styles.label}>House Number / ID (Door Number)</Text>
-                        <Text style={styles.helperText}>Enter existing House ID and tap outside to load previous month&apos;s data.</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="e.g. 12/401"
-                            value={formData.houseNumber}
-                            onChangeText={(val) => setFormData({...formData, houseNumber: val})}
-                            onBlur={() => checkExistingHouse(formData.houseNumber)}
-                            editable={!loading}
-                        />
-                        {loading && <ActivityIndicator size="small" color="#1F7A6B" style={{ marginVertical: 8 }} />}
-
-                        <Text style={styles.label}>Total Members in House</Text>
-                        <TextInput style={styles.input} keyboardType="numeric" placeholder="e.g. 5" value={formData.totalMembers} onChangeText={(val) => setFormData({...formData, totalMembers: val})} editable={!loading} />
-
-                        <TouchableOpacity style={styles.submitButton} onPress={prepareMembers} disabled={loading}>
-                            <Text style={styles.submitText}>NEXT: MEMBER DETAILS</Text>
-                        </TouchableOpacity>
-                    </View>
-                )}
-
-                {step === 1.5 && (
-                    <View>
-                        <Text style={styles.sectionTitle}>Individual Member Details</Text>
-                        <Text style={styles.helperText}>Update health status (BP, Sugar) for members with chronic conditions. Add new diseases per member if needed.</Text>
-                        {formData.members.map((member, index) => {
-                            const chronic = member.chronicConditions || [];
-                            const hasChronic = chronic.length > 0;
-                            return (
-                                <View key={index} style={[styles.memberCard, hasChronic && styles.chronicCard]}>
-                                    <Text style={styles.memberTitle}>
-                                        {index === 0 ? "Head of the House" : `Member ${index + 1}`}
-                                        {hasChronic && <Text style={styles.chronicBadge}> • Chronic</Text>}
-                                    </Text>
-                                    <TextInput style={styles.input} placeholder="Full Name *" value={member.name} onChangeText={(val) => updateMember(index, 'name', val)} />
-                                    <TextInput style={styles.input} placeholder="Age *" keyboardType="numeric" value={member.age} onChangeText={(val) => updateMember(index, 'age', val)} />
-                                    <TextInput style={styles.input} placeholder="Relation" value={member.relation} editable={index !== 0} onChangeText={(val) => updateMember(index, 'relation', val)} />
-                                    <Text style={styles.label}>Blood Pressure (e.g. 120/80)</Text>
-                                    <TextInput style={styles.input} placeholder="BP" value={member.bloodPressure} onChangeText={(val) => updateMember(index, 'bloodPressure', val)} />
-                                    <Text style={styles.label}>Sugar Level (mg/dL)</Text>
-                                    <TextInput style={styles.input} placeholder="Sugar" keyboardType="numeric" value={member.sugarLevel} onChangeText={(val) => updateMember(index, 'sugarLevel', val)} />
-                                    <Text style={styles.label}>Chronic Conditions (this member)</Text>
-                                    <View style={styles.checklist}>
-                                        {CHRONIC_OPTIONS.map((item) => (
-                                            <TouchableOpacity
-                                                key={item}
-                                                style={[styles.checkItem, chronic.includes(item) && styles.activeCheck]}
-                                                onPress={() => toggleMemberChronic(index, item)}
-                                            >
-                                                <Text style={chronic.includes(item) ? { color: 'white' } : {}}>{item}</Text>
-                                            </TouchableOpacity>
-                                        ))}
+                        <Text style={styles.label}>Enter House ID</Text>
+                        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
+                            <TextInput style={[styles.input, { flex: 1, marginBottom: 0 }]} placeholder="e.g. 12/401" value={houseId} onChangeText={setHouseId} />
+                            <TouchableOpacity style={styles.searchButton} onPress={fetchHouseData} disabled={loading}>
+                                {loading ? <ActivityIndicator color="white" /> : <Ionicons name="search" size={20} color="white" />}
+                            </TouchableOpacity>
+                        </View>
+                        {existingResidents.length > 0 && (
+                            <View style={styles.residentBox}>
+                                <Text style={styles.sectionTitle}>Existing Members:</Text>
+                                {existingResidents.map((res, idx) => (
+                                    <View key={idx} style={styles.residentItem}>
+                                        <Text style={{ fontSize: 16 }}>👤 {res.name} (Age: {res.age})</Text>
                                     </View>
-                                </View>
-                            );
-                        })}
-                        <TouchableOpacity style={styles.submitButton} onPress={() => setStep(2)}>
-                            <Text style={styles.submitText}>NEXT: HOUSE SUMMARY</Text>
+                                ))}
+                            </View>
+                        )}
+                        <TouchableOpacity style={styles.submitButton} onPress={handleProceedToAddEdit} disabled={!houseId.trim()}>
+                            <Text style={styles.submitText}>{existingResidents.length > 0 ? "EDIT & ADD NEW MEMBER" : "CREATE NEW HOUSEHOLD"}</Text>
                         </TouchableOpacity>
                     </View>
                 )}
 
                 {step === 2 && (
                     <View>
+                        <Text style={styles.sectionTitle}>Review & Add Members</Text>
+
+                        {formData.members.map((member, index) => {
+                            const isNew = !member.id;
+                            const currentMonth = calculatePregnancyMonth(member.lmpDate);
+
+                            return (
+                                <View key={index} style={[styles.card, isNew && styles.newCard]}>
+                                    <View style={styles.cardHeader}>
+                                        <Text style={styles.cardTitle}>{isNew ? "✨ New Member" : `Edit: ${member.name}`}</Text>
+                                        <TouchableOpacity onPress={() => removeMemberSlot(index)}>
+                                            {loading ? <ActivityIndicator size="small" color="#D32F2F" /> : <Ionicons name="trash" size={20} color="#D32F2F" />}
+                                        </TouchableOpacity>
+                                    </View>
+
+                                    <TextInput
+                                        style={[styles.input, hasError(member.name) && styles.inputError]}
+                                        placeholder="Full Name *"
+                                        value={member.name}
+                                        onChangeText={(val) => updateMember(index, 'name', val)}
+                                    />
+
+                                    <View style={{ flexDirection: 'row', gap: 10 }}>
+                                        <TextInput
+                                            style={[styles.input, { flex: 1 }, hasError(member.age) && styles.inputError]}
+                                            placeholder="Age *"
+                                            keyboardType="numeric"
+                                            value={member.age}
+                                            onChangeText={(val) => updateMember(index, 'age', val)}
+                                        />
+                                        <TextInput
+                                            style={[styles.input, { flex: 1 }, hasError(member.gender) && styles.inputError]}
+                                            placeholder="Gender (M/F) *"
+                                            value={member.gender}
+                                            onChangeText={(val) => updateMember(index, 'gender', val)}
+                                        />
+                                    </View>
+
+                                    <TextInput
+                                        style={[styles.input, hasError(member.relation) && styles.inputError]}
+                                        placeholder="Relation to Head *"
+                                        value={member.relation}
+                                        onChangeText={(val) => updateMember(index, 'relation', val)}
+                                    />
+                                    <TextInput
+                                        style={[styles.input, (hasError(member.mobile) || (attemptedSubmit && member.mobile.length !== 10)) && styles.inputError]}
+                                        placeholder="Mobile *"
+                                        maxLength={10}
+                                        keyboardType="phone-pad"
+                                        value={member.mobile}
+                                        onChangeText={(val) => updateMember(index, 'mobile', val)}
+                                    />
+
+                                    <View style={{ flexDirection: 'row', gap: 10 }}>
+                                        <TextInput
+                                            style={[styles.input, { flex: 1 }, hasError(member.weight) && styles.inputError]}
+                                            placeholder="Weight (kg) *"
+                                            keyboardType="numeric"
+                                            value={member.weight}
+                                            onChangeText={(val) => updateMember(index, 'weight', val)}
+                                        />
+                                        <TextInput
+                                            style={[styles.input, { flex: 1 }, hasError(member.bloodPressure) && styles.inputError]}
+                                            placeholder="BP (120/80) *"
+                                            value={member.bloodPressure}
+                                            onChangeText={(val) => updateMember(index, 'bloodPressure', val)}
+                                        />
+                                    </View>
+                                    <TextInput
+                                        style={[styles.input, hasError(member.sugarLevel) && styles.inputError]}
+                                        placeholder="Sugar (mg/dL) *"
+                                        keyboardType="numeric"
+                                        value={member.sugarLevel}
+                                        onChangeText={(val) => updateMember(index, 'sugarLevel', val)}
+                                    />
+
+                                    <Text style={styles.label}>Health Status:</Text>
+                                    <View style={{ flexWrap: 'wrap', flexDirection: 'row', gap: 10, marginBottom: 15 }}>
+                                        <TouchableOpacity
+                                            style={[styles.toggleBtn, member.isPregnant && styles.toggleActivePregnant]}
+                                            onPress={() => {
+                                                const newPregnantState = !member.isPregnant;
+                                                updateMember(index, 'isPregnant', newPregnantState);
+
+                                                if (newPregnantState) {
+                                                    toggleDatePicker(index, true);
+                                                    updateMember(index, 'lactating', false);
+                                                } else {
+                                                    updateMember(index, 'lmpDate', null);
+                                                    updateMember(index, 'pregnancyMonth', null);
+                                                }
+                                            }}
+                                        >
+                                            <Text style={member.isPregnant ? styles.toggleTextActive : styles.toggleTextInactive}>🤰 Pregnant</Text>
+                                        </TouchableOpacity>
+
+                                        <TouchableOpacity
+                                            style={[styles.toggleBtn, member.lactating && styles.toggleActiveLactating]}
+                                            onPress={() => {
+                                                const newLactatingState = !member.lactating;
+                                                if (newLactatingState) {
+                                                    updateMember(index, 'isPregnant', false);
+                                                    updateMember(index, 'lmpDate', null);
+                                                    updateMember(index, 'pregnancyMonth', null);
+                                                }
+                                                updateMember(index, 'lactating', newLactatingState);
+                                            }}
+                                        >
+                                            <Text style={member.lactating ? styles.toggleTextActive : styles.toggleTextInactive}>🍼 Breastfeeding</Text>
+                                        </TouchableOpacity>
+
+                                        <TouchableOpacity
+                                            style={[styles.toggleBtn, member.isBedridden && styles.toggleActiveBedridden]}
+                                            onPress={() => updateMember(index, 'isBedridden', !member.isBedridden)}
+                                        >
+                                            <Text style={member.isBedridden ? styles.toggleTextActive : styles.toggleTextInactive}>🛏️ Bedridden</Text>
+                                        </TouchableOpacity>
+                                    </View>
+
+                                    {member.isPregnant && (
+                                        <View style={[styles.dateDatePickerCardBlock, (attemptedSubmit && !member.lmpDate) && styles.inputError]}>
+                                            <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
+                                                <Text style={[styles.label, {color: '#8E24AA', marginBottom: 0}]}>Month Calculation (based on LMP)</Text>
+
+                                                {Platform.OS !== 'web' && (
+                                                    <TouchableOpacity onPress={() => toggleDatePicker(index)} style={styles.dateEditBtn}>
+                                                        <Text style={{color: 'white', fontSize: 12}}>
+                                                            {showDatePickerMap[index] && Platform.OS === 'ios' ? "Done" : (member.lmpDate ? "Change Date" : "Select Date")}
+                                                        </Text>
+                                                    </TouchableOpacity>
+                                                )}
+                                            </View>
+
+                                            {member.lmpDate && (
+                                                <View style={styles.calculationResultBox}>
+                                                    <Text style={styles.resultText}>LMP: <Text style={{fontWeight: 'normal'}}>{new Date(member.lmpDate).toLocaleDateString()}</Text></Text>
+                                                    <View style={styles.monthPill}>
+                                                        <Text style={styles.monthNumber}>{currentMonth || "?"}</Text>
+                                                        <Text style={styles.monthLabel}>Month</Text>
+                                                    </View>
+                                                </View>
+                                            )}
+
+                                            {!member.lmpDate && Platform.OS !== 'web' && (
+                                                <Text style={styles.warningText}>⚠️ Select Last Menstrual Period date to calculate month.</Text>
+                                            )}
+
+                                            {Platform.OS === 'web' ? (
+                                                <TextInput
+                                                    style={[styles.input, { marginTop: 15, marginBottom: 5, padding: 10 }]}
+                                                    {...({ type: 'date' } as any)}
+                                                    value={member.lmpDate ? member.lmpDate.split('T')[0] : ''}
+                                                    onChangeText={(text) => {
+                                                        if (text) {
+                                                            updatePregnancyLMP(index, new Date(text));
+                                                        }
+                                                    }}
+                                                />
+                                            ) : (
+                                                showDatePickerMap[index] && (
+                                                    <DateTimePicker
+                                                        value={member.lmpDate ? new Date(member.lmpDate) : new Date()}
+                                                        mode="date"
+                                                        maximumDate={new Date()}
+                                                        display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                                        onChange={(e, date) => {
+                                                            if (Platform.OS === 'android') {
+                                                                setShowDatePickerMap(prev => ({ ...prev, [index]: false }));
+                                                            }
+                                                            if (e.type === "dismissed") {
+                                                                if (!member.lmpDate) updateMember(index, 'isPregnant', false);
+                                                                return;
+                                                            }
+                                                            if (date) {
+                                                                updatePregnancyLMP(index, date);
+                                                            }
+                                                        }}
+                                                    />
+                                                )
+                                            )}
+                                        </View>
+                                    )}
+
+                                    <Text style={styles.label}>Chronic Diseases:</Text>
+                                    <View style={styles.pillContainer}>
+                                        {CHRONIC_OPTIONS.map(cond => (
+                                            <TouchableOpacity key={cond} style={[styles.pill, member.chronicConditions?.includes(cond) && styles.pillActive]} onPress={() => toggleCondition(index, cond)}>
+                                                <Text style={member.chronicConditions?.includes(cond) ? styles.pillTextActive : styles.pillTextInactive}>{cond}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                </View>
+                            );
+                        })}
+
+                        <TouchableOpacity style={styles.addMoreBtn} onPress={() => setFormData({ members: [...formData.members, generateBlankMember()]})}>
+                            <Text style={styles.addMoreText}>+ ADD ANOTHER PERSON</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.submitButton} onPress={proceedToSummary}><Text style={styles.submitText}>NEXT: HEALTH SUMMARY</Text></TouchableOpacity>
+                    </View>
+                )}
+
+                {step === 3 && (
+                    <View>
                         <Text style={styles.sectionTitle}>Household Health Summary</Text>
-                        <Text style={styles.label}>How many are disabled?</Text>
-                        <TextInput style={styles.input} keyboardType="numeric" placeholder="0" value={formData.summary.disabledCount} onChangeText={(val) => setFormData({...formData, summary: {...formData.summary, disabledCount: val}})} />
+                        <Text style={{ color: '#666', marginBottom: 20 }}>Please review before saving.</Text>
 
-                        <Text style={styles.label}>How many are bedridden?</Text>
-                        <TextInput style={styles.input} keyboardType="numeric" placeholder="0" value={formData.summary.bedriddenCount} onChangeText={(val) => setFormData({...formData, summary: {...formData.summary, bedriddenCount: val}})} />
-
-                        <TouchableOpacity style={[styles.input, formData.summary.isPregnant && styles.activeToggle]} onPress={() => setFormData({...formData, summary: {...formData.summary, isPregnant: !formData.summary.isPregnant}})}>
-                            <Text>Pregnant Women in House? {formData.summary.isPregnant ? "✅ Yes" : "❌ No"}</Text>
-                        </TouchableOpacity>
-
-                        {formData.summary.isPregnant && (
-                            <View style={styles.datePickerContainer}>
-                                <Text style={styles.label}>Select LMP Date (Required)</Text>
-                                <DateTimePicker
-                                    value={new Date(formData.summary.lmpDate)}
-                                    mode="date"
-                                    maximumDate={new Date()}
-                                    onChange={(event, selectedDate) => {
-                                        // ✅ Only update if a date was actually selected (prevents crash on 'Cancel')
-                                        if (selectedDate) {
-                                            setFormData({
-                                                ...formData,
-                                                summary: { ...formData.summary, lmpDate: selectedDate.toISOString() }
-                                            });
-                                        }
-                                    }}
-                                />
-                            </View>
-                        )}
-
-                        <TouchableOpacity style={[styles.input, formData.summary.isBreastfeeding && styles.activeToggle]} onPress={() => setFormData({...formData, summary: {...formData.summary, isBreastfeeding: !formData.summary.isBreastfeeding}})}>
-                            <Text>Breastfeeding Mothers? {formData.summary.isBreastfeeding ? "✅ Yes" : "❌ No"}</Text>
-                        </TouchableOpacity>
-
-                        <Text style={styles.label}>Chronic Conditions (Checklist):</Text>
-                        <View style={styles.checklist}>
-                            {["Diabetes", "Hypertension", "Thyroid", "Heart Disease"].map(item => (
-                                <TouchableOpacity key={item} style={[styles.checkItem, formData.summary.chronicConditions.includes(item) && styles.activeCheck]} onPress={() => toggleChronicCondition(item)}>
-                                    <Text style={formData.summary.chronicConditions.includes(item) && {color: 'white'}}>{item}</Text>
-                                </TouchableOpacity>
-                            ))}
+                        <View style={[styles.summaryBox, { borderColor: '#E91E63' }]}>
+                            <Text style={[styles.summaryTitle, { color: '#C2185B' }]}>🤰 Pregnant Women ({pregnantMembers.length})</Text>
+                            {pregnantMembers.length === 0 ? <Text style={styles.summaryNone}>None.</Text> :
+                                pregnantMembers.map((m, idx) => (
+                                    <View key={idx} style={styles.summaryItem}>
+                                        <Text style={styles.summaryName}>• {m.name} (Age: {m.age})</Text>
+                                        <Text style={styles.summaryHealthDetail}>
+                                            Current: <Text style={{fontWeight: 'bold', color: '#E91E63'}}>Month {calculatePregnancyMonth(m.lmpDate)}</Text> (LMP: {new Date(m.lmpDate).toLocaleDateString()})
+                                        </Text>
+                                    </View>
+                                ))}
                         </View>
 
-                        <TouchableOpacity style={styles.submitButton} onPress={handleSave} disabled={loading}>
-                            {loading ? <ActivityIndicator color="white" /> : <Text style={styles.submitText}>FINISH & SAVE SURVEY</Text>}
+                        <View style={[styles.summaryBox, { borderColor: '#0288D1' }]}>
+                            <Text style={[styles.summaryTitle, { color: '#01579B' }]}>🍼 Breastfeeding Mothers ({breastfeedingMembers.length})</Text>
+                            {breastfeedingMembers.length === 0 ? <Text style={styles.summaryNone}>None.</Text> :
+                                breastfeedingMembers.map((m, idx) => (
+                                    <Text key={idx} style={styles.summaryName}>• {m.name} (Age: {m.age})</Text>
+                                ))}
+                        </View>
+
+                        <View style={[styles.summaryBox, { borderColor: '#D32F2F' }]}>
+                            <Text style={[styles.summaryTitle, { color: '#B71C1C' }]}>🩺 Chronic Diseases ({diseasedMembers.length})</Text>
+                            {diseasedMembers.length === 0 ? <Text style={styles.summaryNone}>None.</Text> :
+                                diseasedMembers.map((m, idx) => (
+                                    <View key={idx} style={styles.summaryItem}>
+                                        <Text style={styles.summaryName}>• {m.name}</Text>
+                                        <Text style={styles.summaryHealthDetail}>{m.chronicConditions?.join(", ")}</Text>
+                                    </View>
+                                ))}
+                        </View>
+
+                        <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={loading}>
+                            {loading ? <ActivityIndicator color="white" /> : <Text style={styles.submitText}>SAVE ALL RECORDS</Text>}
                         </TouchableOpacity>
                     </View>
                 )}
@@ -369,20 +551,46 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: "#F4F6F8" },
     header: { backgroundColor: "#1F7A6B", padding: 20, paddingTop: 50, flexDirection: 'row', alignItems: 'center' },
     headerText: { color: "white", fontSize: 18, fontWeight: "bold", marginLeft: 15 },
-    form: { padding: 20 },
-    label: { fontWeight: "bold", marginBottom: 5, color: "#333" },
-    input: { backgroundColor: "white", padding: 15, borderRadius: 10, marginBottom: 15, borderWidth: 1, borderColor: "#ddd", justifyContent: 'center' },
-    activeToggle: { borderColor: "#1F7A6B", borderWidth: 2 },
-    memberCard: { backgroundColor: "#E0F2F1", padding: 15, borderRadius: 12, marginBottom: 20, borderLeftWidth: 5, borderLeftColor: "#1F7A6B" },
-    memberTitle: { fontWeight: 'bold', color: '#1F7A6B', marginBottom: 10 },
+    form: { padding: 15 },
+    label: { fontWeight: "bold", marginBottom: 5, color: "#444", fontSize: 13 },
+    input: { backgroundColor: "white", padding: 15, borderRadius: 10, marginBottom: 15, borderWidth: 1, borderColor: "#ddd", fontSize: 14 },
+    inputError: { borderColor: '#D32F2F', borderWidth: 2 },
+    searchButton: { backgroundColor: "#1F7A6B", justifyContent: 'center', paddingHorizontal: 20, borderRadius: 10, height: 50 },
+    submitButton: { backgroundColor: "#1F7A6B", padding: 18, borderRadius: 10, alignItems: "center", marginTop: 15 },
+    saveBtn: { backgroundColor: "#2E7D32", padding: 18, borderRadius: 10, alignItems: "center", marginTop: 25 },
+    submitText: { color: "white", fontWeight: "bold", fontSize: 16 },
     sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#1F7A6B', marginBottom: 15 },
-    datePickerContainer: { backgroundColor: 'white', padding: 10, borderRadius: 10, marginBottom: 20, borderWidth: 1, borderColor: '#1F7A6B', alignItems: 'center' },
-    checklist: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 20 },
-    checkItem: { padding: 10, backgroundColor: 'white', borderRadius: 20, borderWidth: 1, borderColor: '#ddd', marginRight: 10, marginBottom: 10 },
-    activeCheck: { backgroundColor: '#1F7A6B', borderColor: '#1F7A6B' },
-    chronicCard: { borderWidth: 1.5, borderColor: '#D32F2F', backgroundColor: '#FFEBEE' },
-    chronicBadge: { color: '#D32F2F', fontSize: 12, fontWeight: '600' },
-    helperText: { color: '#666', fontSize: 12, marginBottom: 12, fontStyle: 'italic' },
-    submitButton: { backgroundColor: "#1F7A6B", padding: 18, borderRadius: 10, alignItems: "center", marginTop: 10 },
-    submitText: { color: "white", fontWeight: "bold", fontSize: 16 }
+    residentBox: { backgroundColor: 'white', padding: 15, borderRadius: 10, marginBottom: 20, borderWidth: 1, borderColor: '#eee' },
+    residentItem: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
+    card: { backgroundColor: "white", padding: 15, borderRadius: 12, marginBottom: 20, elevation: 2, borderWidth: 1, borderColor: "#eee" },
+    newCard: { borderColor: '#1F7A6B', borderWidth: 2, backgroundColor: '#FAFAFA' },
+    cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15, alignItems: 'center' },
+    cardTitle: { fontWeight: 'bold', fontSize: 15, color: '#333' },
+    toggleBtn: { paddingVertical: 10, paddingHorizontal: 15, borderRadius: 20, borderWidth: 1, borderColor: '#ddd', backgroundColor: 'white', marginRight: 5 },
+    toggleActivePregnant: { backgroundColor: '#FCE4EC', borderColor: '#F06292' },
+    toggleActiveLactating: { backgroundColor: '#E1F5FE', borderColor: '#4FC3F7' },
+    toggleActiveBedridden: { backgroundColor: '#FFF3E0', borderColor: '#FFB74D' },
+    toggleTextActive: { fontWeight: 'bold', color: '#333', fontSize: 12 },
+    toggleTextInactive: { color: '#777', fontSize: 12 },
+    pillContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 5 },
+    pill: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 15, borderWidth: 1, borderColor: '#ddd', backgroundColor: 'white' },
+    pillActive: { backgroundColor: '#D32F2F', borderColor: '#D32F2F' },
+    pillTextActive: { color: 'white', fontWeight: '500', fontSize: 11 },
+    pillTextInactive: { color: '#D32F2F', fontSize: 11 },
+    addMoreBtn: { backgroundColor: '#E0F2F1', borderWidth: 1, borderColor: '#1F7A6B', padding: 15, borderRadius: 10, alignItems: "center", marginBottom: 10 },
+    addMoreText: { color: '#1F7A6B', fontWeight: 'bold', fontSize: 14 },
+    summaryBox: { backgroundColor: 'white', padding: 15, borderRadius: 12, marginBottom: 15, borderWidth: 1, borderLeftWidth: 5 },
+    summaryTitle: { fontSize: 15, fontWeight: 'bold', marginBottom: 10 },
+    summaryNone: { color: '#999', fontStyle: 'italic', fontSize: 13 },
+    summaryItem: { marginBottom: 8, borderBottomWidth: 1, borderBottomColor: '#f0f0f0', paddingBottom: 5 },
+    summaryName: { fontSize: 14, fontWeight: '500', color: '#444' },
+    summaryHealthDetail: { color: '#777', fontSize: 12, paddingLeft: 12, marginTop: 2 },
+    dateDatePickerCardBlock: { backgroundColor: '#F3E5F5', padding: 12, borderRadius: 10, marginVertical: 10, borderWidth: 1, borderColor: '#CE93D8' },
+    dateEditBtn: { backgroundColor: '#8E24AA', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 15 },
+    calculationResultBox: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, backgroundColor: 'white', padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#E1BEE7' },
+    resultText: { fontSize: 13, color: '#333', fontWeight: 'bold' },
+    warningText: { color: '#C62828', fontSize: 12, fontStyle: 'italic', marginTop: 8 },
+    monthPill: { backgroundColor: '#8E24AA', width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center' },
+    monthNumber: { fontSize: 24, fontWeight: 'bold', color: 'white' },
+    monthLabel: { fontSize: 9, color: 'white', marginTop: -2 }
 });

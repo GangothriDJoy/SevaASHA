@@ -10,7 +10,8 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 interface Member {
     name: string;
     age: string;
-    gender: string;
+    mobile: string;
+    gender: string; // <-- Gender is already defined here
     relation: string;
     bloodPressure: string;
     sugarLevel: string;
@@ -129,22 +130,38 @@ export default function AddNew() {
             Alert.alert("Invalid", "Please enter a valid number of members.");
             return;
         }
-        const initialMembers: Member[] = Array.from({ length: count }, (_, i) => ({
-            name: "",
-            age: "",
-            gender: "Female",
-            relation: i === 0 ? "Head of House" : "",
-            bloodPressure: "",
-            sugarLevel: "",
-            cholesterol: "",
-            status: "General"
-        }));
-        setFormData({ ...formData, members: initialMembers });
+        const currentMembers = [...formData.members];
+        let updatedMembersList: Member[] = [];
+        if (count > currentMembers.length) {
+            // ✅ Keep existing and add empty slots for NEW members
+            const additionalNeeded = count - currentMembers.length;
+            const newSlots = Array.from({ length: additionalNeeded }, (_, i) => ({
+                name: "",
+                age: "",
+                mobile: "",
+                gender: "", // <-- Initialize gender to empty
+                relation: i === 0 ? "Head of House" : "",
+                bloodPressure: "",
+                sugarLevel: "",
+                cholesterol: "",
+                status: "General" as "General"
+            }));
+
+            updatedMembersList = [...currentMembers, ...newSlots];
+        } else {
+            // ✅ Trim the list if the count decreased
+            updatedMembersList = currentMembers.slice(0, count);
+        }
+        setFormData({ ...formData, members: updatedMembersList });
         setStep(1.5);
     };
 
     const updateMember = (index: number, field: keyof Member, value: string) => {
         const updatedMembers = [...formData.members];
+        // Strip non-numeric characters for mobile input
+        if (field === 'mobile') {
+            value = value.replace(/[^0-9]/g, '');
+        }
         (updatedMembers[index] as any)[field] = value;
         setFormData({ ...formData, members: updatedMembers });
     };
@@ -156,7 +173,7 @@ export default function AddNew() {
         } else {
             current.push(condition);
         }
-        setFormData({...formData, summary: {...formData.summary, chronicConditions: current}});
+        setFormData({ ...formData, summary: { ...formData.summary, chronicConditions: current } });
     };
 
     const getPregnancyMonthLabel = () => {
@@ -174,70 +191,69 @@ export default function AddNew() {
         return `Current pregnancy month: ${month}`;
     };
 
-// ... inside AddNew component, before handleSaveSurvey
+    const removeMemberSlot = (index: number) => {
+        const updatedMembers = formData.members.filter((_, i) => i !== index);
+        setFormData(prev => ({
+            ...prev,
+            members: updatedMembers,
+            totalMembers: String(updatedMembers.length)
+        }));
+    };
 
     const goToStepTwo = () => {
-        // Check every member in the current list
         for (let i = 0; i < formData.members.length; i++) {
             const m = formData.members[i];
             const label = i === 0 ? "Head of House" : `Member ${i + 1}`;
 
-            // Strict check: No empty strings or just spaces
-            if (!m.name.trim() || !m.age.trim() || !m.bloodPressure.trim() || !m.sugarLevel.trim()) {
+            // Add check for gender
+            if (!m.name.trim() || !m.age.trim() || !m.gender.trim() || !m.bloodPressure.trim() || !m.sugarLevel.trim()) {
                 Alert.alert(
                     "Incomplete Member Details",
-                    `Please fill all mandatory fields (Name, Age, BP, and Sugar) for ${label} before proceeding.`
+                    `Please fill all mandatory fields (Name, Age, Gender, BP, and Sugar) for ${label} before proceeding.`
                 );
-                return; // 🛑 Stops the user from going to Step 2
+                return;
             }
         }
-        // Only runs if all fields are filled
         setStep(2);
     };
 
-
     const handleSaveSurvey = async () => {
         console.log("1. Save Button Clicked");
-        // 1. Strict Household Check
         if (!formData.houseNumber || formData.houseNumber.trim().length < 1) {
             Alert.alert("Required", "House Number is mandatory.");
-            return; // 🛑 Stops everything here
+            return;
         }
 
-        // 2. Strict Member Loop
         for (let i = 0; i < formData.members.length; i++) {
             const m = formData.members[i];
             const label = i === 0 ? "Head of House" : `Member ${i + 1}`;
 
-            // This check looks for empty strings OR just spaces
             const isNameMissing = !m.name || m.name.trim() === "";
             const isAgeMissing = !m.age || m.age.trim() === "";
+            const isGenderMissing = !m.gender || m.gender.trim() === ""; // Add gender check
             const isBPMissing = !m.bloodPressure || m.bloodPressure.trim() === "";
             const isSugarMissing = !m.sugarLevel || m.sugarLevel.trim() === "";
 
-            if (isNameMissing || isAgeMissing || isBPMissing || isSugarMissing) {
+            if (isNameMissing || isAgeMissing || isGenderMissing || isBPMissing || isSugarMissing) {
                 Alert.alert(
                     "Incomplete Member Data",
-                    `Section for ${label} is missing required health metrics. Please fill Name, Age, BP, and Sugar.`
+                    `Section for ${label} is missing required metrics. Please fill Name, Age, Gender, BP, and Sugar.`
                 );
-                setStep(1.5); // 🚀 Forces the app back to the Member Details screen
+                setStep(1.5);
                 setLoading(false);
-                return; // 🛑 HARD STOP: Does not reach Firebase
+                return;
             }
         }
 
-        // 3. Strict Pregnancy Check
         if (formData.summary.isPregnant && (!formData.summary.lmpDate)) {
             Alert.alert("Required", "LMP Date is mandatory for pregnancy tracking.");
             setStep(2);
-            return; // 🛑 HARD STOP
+            return;
         }
 
-        // --- ONLY IF ALL ABOVE PASSES, IT REACHES HERE ---
         setLoading(true);
         try {
             console.log("2. Attempting Firebase Save...");
-            console.log("Validation passed. Saving to Firebase...");
             const savePromises = formData.members.map((member) => {
                 return addDoc(collection(db, "household_members"), {
                     ...member,
@@ -268,9 +284,9 @@ export default function AddNew() {
                 pathname: "/dashboard",
                 params: { mobile: workerMobile, role: workerRole, name: workerName }
             });
-        } catch (error:any) {
+        } catch (error: any) {
             console.error("Firebase Error:", error);
-            Alert.alert("Error", "Save failed. Check your internet.\");");
+            Alert.alert("Error", "Save failed. Check your internet.");
         } finally {
             setLoading(false);
         }
@@ -293,11 +309,11 @@ export default function AddNew() {
                             style={styles.input}
                             placeholder="e.g. 12/401"
                             value={formData.houseNumber}
-                            onChangeText={(val) => setFormData({...formData, houseNumber: val})}
+                            onChangeText={(val) => setFormData({ ...formData, houseNumber: val })}
                             onBlur={() => checkExistingHouse(formData.houseNumber)}
                         />
                         <Text style={styles.label}>Total Members *</Text>
-                        <TextInput style={styles.input} keyboardType="numeric" placeholder="e.g. 5" onChangeText={(val) => setFormData({...formData, totalMembers: val})} />
+                        <TextInput style={styles.input} keyboardType="numeric" placeholder="e.g. 5" value={formData.totalMembers} onChangeText={(val) => setFormData({ ...formData, totalMembers: val })} />
                         <TouchableOpacity style={styles.submitButton} onPress={prepareMembers}>
                             <Text style={styles.submitText}>NEXT: MEMBER DETAILS</Text>
                         </TouchableOpacity>
@@ -309,11 +325,29 @@ export default function AddNew() {
                         <Text style={styles.sectionTitle}>Individual Member Details</Text>
                         {formData.members.map((member, index) => (
                             <View key={index} style={styles.memberCard}>
-                                <Text style={styles.memberTitle}>{index === 0 ? "Head of House" : `Member ${index + 1}`} *</Text>
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                                    <Text style={styles.memberTitle}>{index === 0 ? "Head of House" : `Member ${index + 1}`} *</Text>
+                                    <TouchableOpacity onPress={() => removeMemberSlot(index)}>
+                                        <Ionicons name="trash-outline" size={20} color="#D32F2F" />
+                                    </TouchableOpacity>
+                                </View>
                                 <TextInput style={styles.input} placeholder="Full Name *" value={member.name} onChangeText={(val) => updateMember(index, 'name', val)} />
-                                <TextInput style={styles.input} placeholder="Age *" keyboardType="numeric" value={member.age} onChangeText={(val) => updateMember(index, 'age', val)} />
-                                <TextInput style={styles.input} placeholder="Relation *" value={member.relation} editable={index !== 0} onChangeText={(val) => updateMember(index, 'relation', val)} />
 
+                                <View style={{ flexDirection: 'row', gap: 10 }}>
+                                    <TextInput style={[styles.input, { flex: 1 }]} placeholder="Age *" keyboardType="numeric" value={member.age} onChangeText={(val) => updateMember(index, 'age', val)} />
+                                    {/* <-- Added Gender Input --> */}
+                                    <TextInput style={[styles.input, { flex: 1 }]} placeholder="Gender (M/F) *" value={member.gender} onChangeText={(val) => updateMember(index, 'gender', val)} />
+                                </View>
+
+                                <TextInput style={styles.input} placeholder="Relation *" value={member.relation} editable={index !== 0} onChangeText={(val) => updateMember(index, 'relation', val)} />
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="Mobile Number"
+                                    keyboardType="phone-pad"
+                                    maxLength={10} // <-- Limit mobile number to 10 characters
+                                    value={member.mobile || ""}
+                                    onChangeText={(val) => updateMember(index, 'mobile', val)}
+                                />
                                 <Text style={styles.label}>Health Metrics (Mandatory) *</Text>
                                 <TextInput style={styles.input} placeholder="Blood Pressure (e.g. 120/80) *" value={member.bloodPressure} onChangeText={(val) => updateMember(index, 'bloodPressure', val)} />
                                 <TextInput style={styles.input} placeholder="Sugar Level (mg/dL) *" keyboardType="numeric" value={member.sugarLevel} onChangeText={(val) => updateMember(index, 'sugarLevel', val)} />
@@ -321,7 +355,7 @@ export default function AddNew() {
                         ))}
                         <TouchableOpacity
                             style={styles.submitButton}
-                            onPress={goToStepTwo} // ✅ Only call the validation function
+                            onPress={goToStepTwo}
                         >
                             <Text style={styles.submitText}>NEXT: HOUSE SUMMARY</Text>
                         </TouchableOpacity>
@@ -332,9 +366,9 @@ export default function AddNew() {
                     <View>
                         <Text style={styles.sectionTitle}>Household Health Summary</Text>
                         <Text style={styles.label}>How many are disabled?</Text>
-                        <TextInput style={styles.input} keyboardType="numeric" placeholder="0" onChangeText={(val) => setFormData({...formData, summary: {...formData.summary, disabledCount: val}})} />
+                        <TextInput style={styles.input} keyboardType="numeric" placeholder="0" value={formData.summary.disabledCount} onChangeText={(val) => setFormData({ ...formData, summary: { ...formData.summary, disabledCount: val } })} />
 
-                        <TouchableOpacity style={[styles.input, formData.summary.isPregnant && styles.activeToggle]} onPress={() => setFormData({...formData, summary: {...formData.summary, isPregnant: !formData.summary.isPregnant}})}>
+                        <TouchableOpacity style={[styles.input, formData.summary.isPregnant && styles.activeToggle]} onPress={() => setFormData({ ...formData, summary: { ...formData.summary, isPregnant: !formData.summary.isPregnant } })}>
                             <Text>Pregnant Women? {formData.summary.isPregnant ? "✅ Yes" : "❌ No"}</Text>
                         </TouchableOpacity>
 
@@ -345,7 +379,7 @@ export default function AddNew() {
                                     value={new Date(formData.summary.lmpDate)}
                                     mode="date"
                                     maximumDate={new Date()}
-                                    onChange={(event, date) => { if(date) setFormData({...formData, summary: {...formData.summary, lmpDate: date.toISOString()}})}}
+                                    onChange={(event, date) => { if (date) setFormData({ ...formData, summary: { ...formData.summary, lmpDate: date.toISOString() } }) }}
                                 />
                                 {getPregnancyMonthLabel().length > 0 && (
                                     <Text style={styles.pregnancyMonthLabel}>{getPregnancyMonthLabel()}</Text>
@@ -357,12 +391,11 @@ export default function AddNew() {
                         <View style={styles.checklist}>
                             {["Diabetes", "Hypertension", "Thyroid", "Heart Disease"].map(item => (
                                 <TouchableOpacity key={item} style={[styles.checkItem, formData.summary.chronicConditions.includes(item) && styles.activeCheck]} onPress={() => toggleChronicCondition(item)}>
-                                    <Text style={formData.summary.chronicConditions.includes(item) && {color: 'white'}}>{item}</Text>
+                                    <Text style={formData.summary.chronicConditions.includes(item) ? { color: 'white' } : { color: 'black'}}>{item}</Text>
                                 </TouchableOpacity>
                             ))}
                         </View>
 
-                        {/* --- FINAL SAVE AND EXIT BUTTON --- */}
                         <TouchableOpacity style={styles.saveExitButton} onPress={handleSaveSurvey} disabled={loading}>
                             {loading ? <ActivityIndicator color="white" /> :
                                 <View style={styles.buttonContent}>

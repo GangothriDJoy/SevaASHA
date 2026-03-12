@@ -17,7 +17,8 @@ import { Ionicons } from "@expo/vector-icons";
 export default function UserDetail() {
     const router = useRouter();
     const params = useLocalSearchParams();
-    const userId = Array.isArray(params.userId) ? params.userId : params.userId;const collectionName = Array.isArray(params.collection) ? params.collection : params.collection;
+    const userId = Array.isArray(params.userId) ? params.userId[0] : params.userId;
+    const collectionName = Array.isArray(params.collection) ? params.collection : params.collection;
     const [userData, setUserData] = useState<any>({
         firstName: "",
         lastName: "",
@@ -86,7 +87,7 @@ export default function UserDetail() {
                 alert(successMsg);
                 router.replace("/dashboard");
             } else {
-                Alert.alert("Success", successMsg, [{ text: "OK", onPress: () => router.replace("//dashboard") }]);
+                Alert.alert("Success", successMsg, [{ text: "OK", onPress: () => router.replace("/dashboard") }]);
             }
         } catch (error) {
             console.error("Decision Error:", error);
@@ -120,11 +121,14 @@ export default function UserDetail() {
                 <View style={styles.detailBox}>
                     <DetailItem
                         label="Full Name"
-                        value={userData?.fullName || (userData?.firstName ? `${userData.firstName} ${userData.lastName}` : "Name not found")}
+                        value={userData?.firstName ? `${userData.firstName} ${userData.lastName}` : (userData?.fullName || "Name not found")}
                     />
                     <DetailItem label="Mobile Number" value={userData.mobile} />
                     <DetailItem label="Role" value={userData.role} />
-                    <DetailItem label="Registration Date" value={userData.createdAt || "N/A"} />
+                    <DetailItem
+                        label="Registration Date"
+                        value={userData.createdAt?.toDate ? userData.createdAt.toDate().toLocaleDateString() : String(userData.createdAt || "N/A")}
+                    />
                 </View>
 
                 {/* Add additional fields here if you have them in Firestore */}

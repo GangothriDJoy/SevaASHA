@@ -4,11 +4,22 @@ import { useState, useEffect } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { db } from "../firebaseConfig";
 import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
-
+interface HealthRecord {
+    id: string;
+    recordedAt?: any;
+    bloodPressure?: string;
+    sugarLevel?: any;
+    weight?: number;
+    hemoglobin?: number;
+    // Add these as optional so old records don't crash the app
+    bloodSugar?: any;
+    bp?: any;
+    timestamp?: any;
+}
 export default function MemberProfile() {
     const { memberId, name } = useLocalSearchParams();
     const router = useRouter();
-    const [history, setHistory] = useState<any[]>([]);
+    const [history, setHistory] = useState<HealthRecord[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -21,11 +32,14 @@ export default function MemberProfile() {
         try {
             const q = query(
                 collection(db, "health_records"),
-                where("beneficiaryId", "==", memberId),
-                orderBy("timestamp", "desc")
+                where("beneficiaryId", "==", String(memberId)),
+                //orderBy("timestamp", "desc")
             );
             const snapshot = await getDocs(q);
-            const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const list = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            } as HealthRecord)); // <--- ADD THIS CASTING list.sort((a, b) => (b.recordedAt?.seconds || 0) - (a.recordedAt?.seconds || 0));
             setHistory(list);
         } catch (error) {
             console.error("Error fetching history:", error);
@@ -36,20 +50,23 @@ export default function MemberProfile() {
 
     const getRiskStatus = (type: string, value: string) => {
         if (!value || value === "N/A") return false;
-        if (type === 'sugar') return parseInt(value) > 140;
-        if (type === 'bp') return parseInt(value.split('/')[0]) > 140;
+        if (type === 'sugar') return parseFloat(value) > 140;
+        if (type === 'bp') {
+            const systolic = parseInt(value.split('/')[0]);
+            return systolic >= 140;
+        }
         return false;
     };
 
     const referToJPHN = (item: any) => {
-        const message = `🚨 HIGH RISK ALERT\nPatient: ${name}\nBP: ${item.bp || 'N/A'}\nSugar: ${item.bloodSugar || 'N/A'} mg/dL\nPlease review.`;
+        const message = `🚨 HIGH RISK ALERT\nPatient: ${name}\nBP: ${item.bloodPressure || 'N/A'}\nSugar: ${item.sugarLevel || 'N/A'} mg/dL\nPlease review.`;
         const url = `whatsapp://send?text=${encodeURIComponent(message)}`;
         Linking.canOpenURL(url).then(supp => supp ? Linking.openURL(url) : Alert.alert("Error", "WhatsApp not found"));
     };
 
     const getTrend = () => {
         if (history.length < 2) return null;
-        const latest = parseInt(history[0].bloodSugar);
+        const latest = parseInt(history[0].sugarLevel);
         const previous = parseInt(history[1].bloodSugar);
         if (isNaN(latest) || isNaN(previous)) return null;
         const diff = latest - previous;
@@ -61,7 +78,7 @@ export default function MemberProfile() {
     const getMonthlyStats = () => {
         const now = new Date();
         return history.filter(item => {
-            const d = item.timestamp?.toDate();
+            const d = item.recordedAt?.toDate();
             return d && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
         }).length;
     };
@@ -124,18 +141,36 @@ export default function MemberProfile() {
                     renderItem={({ item }) => {
                         const isHighSugar = getRiskStatus('sugar', item.bloodSugar);
                         const isHighBP = getRiskStatus('bp', item.bp);
+                        const dateDisplay = item.recordedAt?.toDate().toLocaleDateString() || "Unknown Date";
                         const isEmergency = isHighSugar || isHighBP;
                         return (
-                            <View style={[styles.historyCard, isEmergency && { borderLeftColor: '#D32F2F', backgroundColor: '#FFF5F5', elevation: 5 }]}>
+                            <View style={[styles.historyCard, isEmergency && { borderLeftColor: '#D32F2F', backgroundColor: '#FFF5F5' }]}>
                                 <View style={styles.cardHeader}>
                                     <Ionicons name={isEmergency ? "alert-circle" : "calendar-outline"} size={16} color={isEmergency ? "#D32F2F" : "#1F7A6B"} />
-                                    <Text style={[styles.date, isEmergency && { color: '#D32F2F' }]}>{item.timestamp?.toDate().toLocaleDateString()} {isEmergency && "- HIGH RISK"}</Text>
+                                    {/* 2. Use recordedAt instead of timestamp */}
+                                    <Text style={[styles.date, isEmergency && { color: '#D32F2F' }]}>
+                                        {item.recordedAt?.toDate().toLocaleDateString()} {isEmergency && "- HIGH RISK"}
+                                    </Text>
                                 </View>
                                 <View style={styles.dataGrid}>
-                                    <View style={styles.dataItem}><Text style={styles.label}>BP</Text><Text style={[styles.value, isHighBP && { color: '#D32F2F' }]}>{item.bp || "N/A"}</Text></View>
-                                    <View style={styles.dataItem}><Text style={styles.label}>Sugar</Text><Text style={[styles.value, isHighSugar && { color: '#D32F2F' }]}>{item.bloodSugar || "N/A"} mg/dL</Text></View>
-                                    <View style={styles.dataItem}><Text style={styles.label}>Weight</Text><Text style={styles.value}>{item.weight} kg</Text></View>
-                                    <View style={styles.dataItem}><Text style={styles.label}>Hb</Text><Text style={styles.value}>{item.hemoglobin} g/dL</Text></View>
+                                    {/* 3. Use bloodPressure instead of bp */}
+                                    <View style={styles.dataItem}>
+                                        <Text style={styles.label}>BP</Text>
+                                        <Text style={[styles.value, isHighBP && { color: '#D32F2F' }]}>{item.bloodPressure || "N/A"}</Text>
+                                    </View>
+                                    {/* 4. Use sugarLevel instead of bloodSugar */}
+                                    <View style={styles.dataItem}>
+                                        <Text style={styles.label}>Sugar</Text>
+                                        <Text style={[styles.value, isHighSugar && { color: '#D32F2F' }]}>{item.sugarLevel || "N/A"} mg/dL</Text>
+                                    </View>
+                                    <View style={styles.dataItem}>
+                                        <Text style={styles.label}>Weight</Text>
+                                        <Text style={styles.value}>{item.weight} kg</Text>
+                                    </View>
+                                    <View style={styles.dataItem}>
+                                        <Text style={styles.label}>Hb</Text>
+                                        <Text style={styles.value}>{item.hemoglobin} g/dL</Text>
+                                    </View>
                                 </View>
                                 {isEmergency && (
                                     <TouchableOpacity style={styles.referButton} onPress={() => referToJPHN(item)}>

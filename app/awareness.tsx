@@ -59,7 +59,7 @@ const styles = StyleSheet.create({
     content: { padding: 20, flex: 1 },
     sectionTitle: { fontSize: 22, fontWeight: "bold", color: "#333" },
     subTitle: { fontSize: 14, color: "#666", marginBottom: 20 },
-    card: { backgroundColor: "white", padding: 15, borderRadius: 15, marginBottom: 12, flexDirection: 'row', alignItems: 'center', elevation: 2 },
+    card: { backgroundColor: "white", padding: 15, marginBottom: 12, flexDirection: 'row', alignItems: 'center', elevation: 2 },
     iconContainer: { backgroundColor: "#E0F2F1", padding: 10, borderRadius: 10, marginRight: 15 },
     textContainer: { flex: 1 },
     itemTitle: { fontSize: 16, fontWeight: "600", color: "#333" },
