@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, FlatList } from 'react-native';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, limit } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, limit, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '@/firebaseConfig';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -16,8 +16,8 @@ export default function Broadcast() {
         const q = query(collection(db, "broadcasts"), orderBy("createdAt", "desc"), limit(20));
         const unsub = onSnapshot(q, (snap) => {
             const list: any[] = [];
-            snap.forEach(doc => {
-                list.push({ id: doc.id, ...doc.data() });
+            snap.forEach(document => {
+                list.push({ id: document.id, ...document.data() });
             });
             setHistory(list);
         });
@@ -37,6 +37,21 @@ export default function Broadcast() {
             setMsg('');
             setTimeout(() => setIsSent(false), 3000);
         } catch (e) { Alert.alert("Error", "Failed to send."); }
+    };
+
+    const deleteBroadcast = (id: string) => {
+        Alert.alert(
+            "Delete Message",
+            "Are you sure you want to permanently delete this broadcast? It will instantly disappear from all worker dashboards.",
+            [
+                { text: "Cancel", style: "cancel" },
+                { text: "Delete", style: "destructive", onPress: async () => {
+                    try {
+                        await deleteDoc(doc(db, "broadcasts", id));
+                    } catch (e) { Alert.alert("Error", "Failed to delete broadcast."); }
+                }}
+            ]
+        );
     };
 
     const roles = ["All", "ASHA Worker", "Anganwadi Worker", "JPHN"];
@@ -68,8 +83,10 @@ export default function Broadcast() {
 
                 <Text style={styles.label}>Message Body:</Text>
                 <TextInput
-                    multiline numberOfLines={5} style={styles.input}
+                    multiline numberOfLines={5}
+                    style={[styles.input, { color: '#333' }]}
                     placeholder="Enter urgent announcement or policy update..."
+                    placeholderTextColor="#666"
                     value={msg} onChangeText={setMsg}
                 />
 
@@ -93,9 +110,14 @@ export default function Broadcast() {
                                 <View style={styles.targetBadge}>
                                     <Text style={styles.targetBadgeText}>{item.target}</Text>
                                 </View>
-                                <Text style={styles.timeText}>
-                                    {item.createdAt ? item.createdAt.toDate().toLocaleDateString() : 'Just now'}
-                                </Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <Text style={styles.timeText}>
+                                        {item.createdAt ? item.createdAt.toDate().toLocaleDateString() : 'Just now'}
+                                    </Text>
+                                    <TouchableOpacity style={{ marginLeft: 15, padding: 4 }} onPress={() => deleteBroadcast(item.id)}>
+                                        <Ionicons name="trash-outline" size={18} color="#D32F2F" />
+                                    </TouchableOpacity>
+                                </View>
                             </View>
                             <Text style={styles.historyMsg}>{item.message}</Text>
                         </View>

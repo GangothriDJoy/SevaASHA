@@ -227,7 +227,11 @@ export default function AshaDashboard() {
                             );
                         })()}
 
-                        <TouchableOpacity style={styles.tasksCard}>
+                        <TouchableOpacity 
+                            style={styles.tasksCard} 
+                            activeOpacity={0.7}
+                            onPress={() => router.push({ pathname: "/tasks" })}
+                        >
                             <View style={styles.tasksHeader}>
                                 <Text style={styles.tasksTitle}>Tasks for Today</Text>
                                 <View style={styles.taskBadge}>
@@ -344,6 +348,16 @@ export default function AshaDashboard() {
                             >
                                 <Ionicons name="megaphone" size={30} color="#1F7A6B" />
                                 <Text style={styles.actionText}>Awareness</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.actionButton}
+                                onPress={() => router.push({
+                                    pathname: "/medicine-stock",
+                                    params: { role: userRole }
+                                })}
+                            >
+                                <Ionicons name="medkit" size={30} color="#1F7A6B" />
+                                <Text style={styles.actionText}>Inventory</Text>
                             </TouchableOpacity>
                         </View>
 

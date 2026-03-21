@@ -1,47 +1,102 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, SafeAreaView, Dimensions, StatusBar, Alert } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { collection, query, where, onSnapshot, getDoc, doc, orderBy, limit } from "firebase/firestore";
+import { db } from "@/firebaseConfig";
 
 const { width } = Dimensions.get("window");
 
 export default function AwwDashboard() {
     const router = useRouter();
     const params = useLocalSearchParams();
-    const { role, name } = useLocalSearchParams();
+    const { role, name, mobile } = params;
 
     const userName = String(name || "Anganwadi Worker").trim();
     const userRole = String(role || "Anganwadi Worker").trim();
+    const userMobile = String(mobile || "").trim();
 
-    // Mock Dashboard Stats for AWW
-    const awwStats = {
-        totalChildren: 42,
-        pregnantMothers: 12,
-        nutriAlerts: 3,
-        vaccineDue: 5,
-        pendingStock: "80%"
-    };
+    const [globalBroadcasts, setGlobalBroadcasts] = useState<any[]>([]);
     
-    const [globalBroadcasts, setGlobalBroadcasts] = React.useState<any[]>([]);
+    // Live Dynamic Stats
+    const [totalChildren, setTotalChildren] = useState(0);
+    const [pregnantMothers, setPregnantMothers] = useState(0);
+    const [nutriAlerts, setNutriAlerts] = useState(0);
+    const [pendingStock, setPendingStock] = useState("Unknown");
 
-    React.useEffect(() => {
-        import('firebase/firestore').then(({ collection, query, orderBy, limit, onSnapshot }) => {
-            import('@/firebaseConfig').then(({ db }) => {
-                const qBroadcasts = query(collection(db, "broadcasts"), orderBy("createdAt", "desc"), limit(10));
-                const unsubBroadcasts = onSnapshot(qBroadcasts, (snapshot) => {
-                    const list: any[] = [];
-                    snapshot.forEach(doc => {
-                        const data = doc.data();
-                        if (data.target === userRole || data.target === "All" || (!data.target)) {
-                            list.push({ id: doc.id, ...data });
-                        }
-                    });
-                    setGlobalBroadcasts(list);
-                });
-                return () => unsubBroadcasts();
+    useEffect(() => {
+        if (!userMobile) return;
+
+        // 1. Listen to Resident Demographics (Children & Mothers)
+        const qMembers = query(collection(db, "household_members"), where("workerId", "==", userMobile));
+        const unsubMembers = onSnapshot(qMembers, (snapshot) => {
+            let childCount = 0;
+            let motherCount = 0;
+            let criticalNutriCount = 0;
+
+            snapshot.docs.forEach(docSnap => {
+                const data = docSnap.data();
+                const age = parseInt(data.age);
+                
+                // Mothers
+                if (data.isPregnant === true || data.isPregnant === "true" || data.status === "Postnatal") {
+                    motherCount++;
+                }
+                
+                // Children <= 6
+                if (!isNaN(age) && age <= 6) {
+                    childCount++;
+                    
+                    // Nutrition Alert Logic
+                    const w = parseFloat(data.weight);
+                    if (!isNaN(w)) {
+                        if (age <= 1 && w < 7) criticalNutriCount++; // Severe Underweight
+                        else if (age > 1 && age <= 6 && w < 14) criticalNutriCount++; // Underweight
+                    }
+                }
             });
+
+            setTotalChildren(childCount);
+            setPregnantMothers(motherCount);
+            setNutriAlerts(criticalNutriCount);
         });
-    }, [userRole]);
+
+        // 2. Listen to Inventory Stock
+        const unsubInventory = onSnapshot(doc(db, "aww_inventory", userMobile), (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                let criticalItems = 0;
+                Object.entries(data).forEach(([k, v]) => {
+                    if (typeof v === 'number' && v <= 10) criticalItems++;
+                });
+
+                if (criticalItems > 1) setPendingStock(`${criticalItems} Criticals`);
+                else if (criticalItems === 1) setPendingStock(`1 Critical`);
+                else setPendingStock("Optimum");
+            } else {
+                setPendingStock("Uninitialized");
+            }
+        });
+
+        // 3. Listen to Central Broadcasts
+        const qBroadcasts = query(collection(db, "broadcasts"), orderBy("createdAt", "desc"), limit(10));
+        const unsubBroadcasts = onSnapshot(qBroadcasts, (snapshot) => {
+            const list: any[] = [];
+            snapshot.forEach(docSnap => {
+                const data = docSnap.data();
+                if (data.target === userRole || data.target === "All" || (!data.target)) {
+                    list.push({ id: docSnap.id, ...data });
+                }
+            });
+            setGlobalBroadcasts(list);
+        });
+
+        return () => {
+            unsubMembers();
+            unsubInventory();
+            unsubBroadcasts();
+        };
+    }, [userMobile, userRole]);
 
     const handleEmergency = () => {
         Alert.alert(
@@ -76,18 +131,18 @@ export default function AwwDashboard() {
                     {/* Floating Summary Dashboard */}
                     <View style={styles.headerMetricsCard}>
                         <View style={styles.metricBlock}>
-                            <Text style={[styles.metricValue, { color: '#2E7D32' }]}>{awwStats.totalChildren}</Text>
+                            <Text style={[styles.metricValue, { color: '#2E7D32' }]}>{totalChildren}</Text>
                             <Text style={styles.metricLabel}>Children</Text>
                         </View>
                         <View style={styles.divider} />
-                        <View style={styles.metricBlock}>
-                            <Text style={[styles.metricValue, { color: '#1565C0' }]}>{awwStats.pregnantMothers}</Text>
+                        <TouchableOpacity style={styles.metricBlock} onPress={() => router.push({ pathname: "/mother-list", params: { mobile: userMobile } })}>
+                            <Text style={[styles.metricValue, { color: '#1565C0' }]}>{pregnantMothers}</Text>
                             <Text style={styles.metricLabel}>Mothers</Text>
-                        </View>
+                        </TouchableOpacity>
                         <View style={styles.divider} />
                         <View style={styles.metricBlock}>
-                            <View style={styles.alertBadge}>
-                                <Text style={[styles.metricValue, { color: '#E65100' }]}>{awwStats.nutriAlerts}</Text>
+                            <View style={[styles.alertBadge, nutriAlerts > 0 && { backgroundColor: '#FFEBEE' }]}>
+                                <Text style={[styles.metricValue, { color: nutriAlerts > 0 ? '#D32F2F' : '#E65100' }]}>{nutriAlerts}</Text>
                             </View>
                             <Text style={styles.metricLabel}>Nutri-Alerts</Text>
                         </View>
@@ -117,42 +172,42 @@ export default function AwwDashboard() {
                     </View>
 
                     <View style={styles.grid}>
-                        <TouchableOpacity style={styles.gridBtn} activeOpacity={0.7}>
+                        <TouchableOpacity style={styles.gridBtn} activeOpacity={0.7} onPress={() => router.push({ pathname: "/mother-list", params: { mobile: userMobile } })}>
                             <View style={[styles.btnIcon, { backgroundColor: '#FFF3E0' }]}>
-                                <Ionicons name="person-add" size={28} color="#FF9800" />
+                                <Ionicons name="people" size={28} color="#FF9800" />
                             </View>
-                            <Text style={styles.btnLabel}>Add Child</Text>
+                            <Text style={styles.btnLabel}>Maternal Reg.</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.gridBtn} activeOpacity={0.7}>
+                        <TouchableOpacity style={styles.gridBtn} activeOpacity={0.7} onPress={() => router.push({ pathname: "/growth-chart", params: { mobile: userMobile } })}>
                             <View style={[styles.btnIcon, { backgroundColor: '#E8F5E9' }]}>
                                 <Ionicons name="trending-up" size={28} color="#388E3C" />
                             </View>
                             <Text style={styles.btnLabel}>Growth Chart</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.gridBtn} activeOpacity={0.7}>
+                        <TouchableOpacity style={styles.gridBtn} activeOpacity={0.7} onPress={() => router.push({ pathname: "/supplement-records", params: { mobile: userMobile } })}>
                             <View style={[styles.btnIcon, { backgroundColor: '#FCE4EC' }]}>
                                 <Ionicons name="fast-food" size={28} color="#D81B60" />
                             </View>
-                            <Text style={styles.btnLabel}>Food Dist.</Text>
+                            <Text style={styles.btnLabel}>Supplements</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.gridBtn} activeOpacity={0.7}>
+                        <TouchableOpacity style={styles.gridBtn} activeOpacity={0.7} onPress={() => router.push({ pathname: "/attendance", params: { mobile: userMobile } })}>
                             <View style={[styles.btnIcon, { backgroundColor: '#E3F2FD' }]}>
-                                <Ionicons name="calendar" size={28} color="#1976D2" />
+                                <Ionicons name="school" size={28} color="#1976D2" />
                             </View>
                             <Text style={styles.btnLabel}>Attendance</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.gridBtn} activeOpacity={0.7}>
+                        <TouchableOpacity style={styles.gridBtn} activeOpacity={0.7} onPress={() => router.push({ pathname: "/stock-inventory", params: { mobile: userMobile } })}>
                             <View style={[styles.btnIcon, { backgroundColor: '#F3E5F5' }]}>
-                                <Ionicons name="color-palette" size={28} color="#8E24AA" />
+                                <Ionicons name="cube" size={28} color="#8E24AA" />
                             </View>
-                            <Text style={styles.btnLabel}>Activities</Text>
+                            <Text style={styles.btnLabel}>Inventory</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.gridBtn} activeOpacity={0.7}>
+                        <TouchableOpacity style={styles.gridBtn} activeOpacity={0.7} onPress={() => router.push({ pathname: "/reports", params: { mobile: userMobile } })}>
                             <View style={[styles.btnIcon, { backgroundColor: '#E8EAF6' }]}>
                                 <Ionicons name="document-text" size={28} color="#3F51B5" />
                             </View>
@@ -161,28 +216,26 @@ export default function AwwDashboard() {
                     </View>
 
                     {/* --- 3. ALERTS & TRACKING CARDS --- */}
-                    <Text style={[styles.sectionTitle, { marginTop: 15, marginBottom: 10 }]}>Tracking & Inventory</Text>
+                    <Text style={[styles.sectionTitle, { marginTop: 15, marginBottom: 10 }]}>Tracking Alerts</Text>
 
-                    {/* Vaccine Follow-up Card */}
-                    <TouchableOpacity style={styles.wideAlertCard} activeOpacity={0.8}>
-                        <View style={[styles.cardIconBox, { backgroundColor: '#F3E5F5' }]}>
-                            <Ionicons name="medkit" size={24} color="#8E24AA" />
-                        </View>
-                        <View style={styles.cardTextBox}>
-                            <Text style={styles.cardTitle}>Vaccinations Due</Text>
-                            <Text style={styles.cardSubText}>{awwStats.vaccineDue} Children are scheduled for vaccines this week.</Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={20} color="#999" />
-                    </TouchableOpacity>
-
-                    {/* Stock Status Card */}
-                    <TouchableOpacity style={styles.wideAlertCard} activeOpacity={0.8}>
+                    <TouchableOpacity style={styles.wideAlertCard} activeOpacity={0.8} onPress={() => router.push({ pathname: "/stock-inventory", params: { mobile: userMobile } })}>
                         <View style={[styles.cardIconBox, { backgroundColor: '#E0F7FA' }]}>
                             <Ionicons name="clipboard" size={24} color="#0097A7" />
                         </View>
                         <View style={styles.cardTextBox}>
-                            <Text style={styles.cardTitle}>Stock Status</Text>
-                            <Text style={styles.cardSubText}>Supplementary food stock is currently at {awwStats.pendingStock}.</Text>
+                            <Text style={styles.cardTitle}>Global Stock Status</Text>
+                            <Text style={styles.cardSubText}>Your current physical food reserves are rated as: <Text style={{ fontWeight: 'bold' }}>{pendingStock}</Text></Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color="#999" />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.wideAlertCard} activeOpacity={0.8} onPress={() => router.push({ pathname: "/growth-chart", params: { mobile: userMobile } })}>
+                        <View style={[styles.cardIconBox, { backgroundColor: '#FFF3E0' }]}>
+                            <Ionicons name="warning" size={24} color="#E65100" />
+                        </View>
+                        <View style={styles.cardTextBox}>
+                            <Text style={styles.cardTitle}>Clinical Warning Pool</Text>
+                            <Text style={styles.cardSubText}>There are <Text style={{ fontWeight: 'bold', color: '#D32F2F' }}>{nutriAlerts}</Text> children mapped into active Underweight or Severe vectors.</Text>
                         </View>
                         <Ionicons name="chevron-forward" size={20} color="#999" />
                     </TouchableOpacity>
@@ -219,16 +272,7 @@ const styles = StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: "#D84315" },
     container: { flex: 1, backgroundColor: "#FFFBF9" }, // Very soft warm white
 
-    // --- Header Styles ---
-    header: {
-        backgroundColor: "#D84315",
-        paddingHorizontal: 20,
-        paddingTop: Platform.OS === 'android' ? 20 : 10,
-        paddingBottom: 45,
-        borderBottomLeftRadius: 30,
-        borderBottomRightRadius: 30,
-        zIndex: 10
-    },
+    header: { backgroundColor: "#D84315", paddingHorizontal: 20, paddingTop: Platform.OS === 'android' ? 20 : 10, paddingBottom: 45, borderBottomLeftRadius: 30, borderBottomRightRadius: 30, zIndex: 10 },
     headerTopRow: { flexDirection: 'row', alignItems: 'center' },
     backBtn: { padding: 8, marginLeft: -8, borderRadius: 20 },
     headerTextWrapper: { flex: 1, paddingHorizontal: 10 },
@@ -236,84 +280,30 @@ const styles = StyleSheet.create({
     subHeaderText: { color: "#FFCCBC", fontSize: 13, marginTop: 2, fontWeight: "500" },
     profileBtn: { padding: 4, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20 },
 
-    // --- Floating Metrics Card ---
-    headerMetricsCard: {
-        flexDirection: 'row',
-        backgroundColor: '#FFFFFF',
-        borderRadius: 20,
-        padding: 18,
-        position: 'absolute',
-        bottom: -35,
-        alignSelf: 'center',
-        width: width - 40,
-        ...shadowConfig,
-        shadowOpacity: 0.12,
-        elevation: 6
-    },
+    headerMetricsCard: { flexDirection: 'row', backgroundColor: '#FFFFFF', borderRadius: 20, padding: 18, position: 'absolute', bottom: -35, alignSelf: 'center', width: width - 40, ...shadowConfig, shadowOpacity: 0.12, elevation: 6 },
     metricBlock: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     metricValue: { fontSize: 24, fontWeight: '800' },
     metricLabel: { fontSize: 11, color: '#777', marginTop: 4, fontWeight: '600' },
     divider: { width: 1, backgroundColor: '#EEEEEE', marginVertical: 5 },
     alertBadge: { backgroundColor: '#FFF3E0', paddingHorizontal: 12, paddingVertical: 2, borderRadius: 12 },
 
-    // --- Content Area ---
     scrollContent: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 40 },
     sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, marginBottom: 15 },
     sectionTitle: { fontSize: 18, fontWeight: "800", color: "#222" },
 
-    // --- Grid System ---
     grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-    gridBtn: {
-        backgroundColor: '#FFFFFF',
-        width: '31%',
-        paddingVertical: 18,
-        paddingHorizontal: 5,
-        borderRadius: 20,
-        alignItems: 'center',
-        marginBottom: 15,
-        ...shadowConfig,
-        borderWidth: 1,
-        borderColor: '#F9F9F9'
-    },
+    gridBtn: { backgroundColor: '#FFFFFF', width: '31%', paddingVertical: 18, paddingHorizontal: 5, borderRadius: 20, alignItems: 'center', marginBottom: 15, ...shadowConfig, borderWidth: 1, borderColor: '#F9F9F9' },
     btnIcon: { width: 54, height: 54, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
     btnLabel: { fontSize: 11, fontWeight: '700', textAlign: 'center', color: '#444' },
 
-    // --- Wide List Cards ---
-    wideAlertCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#FFFFFF',
-        padding: 16,
-        borderRadius: 20,
-        marginBottom: 12,
-        ...shadowConfig,
-        borderWidth: 1,
-        borderColor: '#F5F5F5'
-    },
+    wideAlertCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', padding: 16, borderRadius: 20, marginBottom: 12, ...shadowConfig, borderWidth: 1, borderColor: '#F5F5F5' },
     cardIconBox: { width: 48, height: 48, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
     cardTextBox: { flex: 1 },
     cardTitle: { fontSize: 15, fontWeight: '800', color: '#333', marginBottom: 4 },
     cardSubText: { fontSize: 12, color: '#666', lineHeight: 18, fontWeight: '500' },
 
-    // --- Emergency Button ---
-    emergencyCard: {
-        backgroundColor: '#C62828',
-        borderRadius: 20,
-        padding: 20,
-        marginTop: 15,
-        flexDirection: 'row',
-        alignItems: 'center',
-        ...emergencyShadow
-    },
-    emergencyIconGlow: {
-        backgroundColor: 'rgba(255,255,255,0.2)',
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 15
-    },
+    emergencyCard: { backgroundColor: '#C62828', borderRadius: 20, padding: 20, marginTop: 15, flexDirection: 'row', alignItems: 'center', ...emergencyShadow },
+    emergencyIconGlow: { backgroundColor: 'rgba(255,255,255,0.2)', width: 56, height: 56, borderRadius: 28, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
     emergencyTextWrap: { flex: 1 },
     emergencyTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '900', letterSpacing: 0.5, marginBottom: 4 },
     emergencySubText: { color: '#FFCDD2', fontSize: 12, lineHeight: 18, fontWeight: '500' },

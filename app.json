@@ -8,14 +8,22 @@
     "scheme": "sevaasha",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "updates": {
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/105b94ed-429d-41dc-84d3-f4e77d6ba868"
+    },
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "This app uses your location to send emergency alerts to supervisors."
-      }
+        "NSLocationWhenInUseUsageDescription": "This app uses your location to send emergency alerts to supervisors.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "bundleIdentifier": "com.gangothri.sevaasha"
     },
     "android": {
       "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION"
       ],
@@ -56,6 +64,9 @@
       "eas": {
         "projectId": "105b94ed-429d-41dc-84d3-f4e77d6ba868"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
     }
   }
 }

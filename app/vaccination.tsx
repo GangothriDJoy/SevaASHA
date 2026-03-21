@@ -38,11 +38,11 @@ export default function VaccinationTracking() {
             const collectionRef = collection(db, "household_members");
             const benRef = collection(db, "beneficiaries");
             const usersRef = collection(db, "users");
-            
+
             const qHm = workerMobile ? query(collectionRef, where("workerId", "==", workerMobile)) : query(collectionRef);
-            const qBen = workerMobile ? query(benRef, where("workerId", "==", workerMobile)) : query(benRef); 
+            const qBen = workerMobile ? query(benRef, where("workerId", "==", workerMobile)) : query(benRef);
             const qUsers = query(usersRef, where("role", "==", "Mother"));
-                
+
             const hmSnap = await getDocs(qHm);
             const benSnap = await getDocs(qBen);
             const usersSnap = await getDocs(qUsers);
@@ -81,7 +81,7 @@ export default function VaccinationTracking() {
                             d.setFullYear(d.getFullYear() - parseInt(child.age));
                             dobStr = d.toISOString().split('T')[0];
                         }
-                        
+
                         const childId = `${doc.id}_child_${index}`;
                         const cData = {
                             ...child,
@@ -100,7 +100,7 @@ export default function VaccinationTracking() {
                             cData.nextVaccine = nextVax.vaccineName;
                             cData.vaccineStatus = nextVax.dueDate < today ? 'Overdue' : 'Due Soon';
                         }
-                        
+
                         children.push(cData);
                     });
                 }
@@ -123,7 +123,7 @@ export default function VaccinationTracking() {
             hmSnap.forEach(processDoc);
             benSnap.forEach(processDoc);
             usersSnap.forEach(processDoc);
-            
+
             // For registered beneficiaries that might have been saved with `ashaId` instead of `workerId`
             if (workerMobile) {
                 const qBenAsha = query(benRef, where("ashaId", "==", workerMobile));
@@ -223,7 +223,7 @@ export default function VaccinationTracking() {
         <View style={styles.container}>
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity 
+                <TouchableOpacity
                     onPress={() => {
                         if (router.canGoBack()) {
                             router.back();
@@ -266,7 +266,8 @@ export default function VaccinationTracking() {
                 <Ionicons name="search" size={20} color="#666" style={styles.searchIcon} />
                 <TextInput
                     placeholder="Search by name or house ID"
-                    style={styles.searchInput}
+                    placeholderTextColor="#666"
+                    style={[styles.searchInput, { color: '#333' }]}
                     value={searchQuery}
                     onChangeText={setSearchQuery}
                 />

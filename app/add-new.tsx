@@ -275,7 +275,13 @@ export default function AddNew() {
                     <View>
                         <Text style={styles.label}>Enter House ID</Text>
                         <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
-                            <TextInput style={[styles.input, { flex: 1, marginBottom: 0 }]} placeholder="e.g. 12/401" value={houseId} onChangeText={setHouseId} />
+                            <TextInput 
+                                style={[styles.input, { flex: 1, marginBottom: 0, color: '#333' }]} 
+                                placeholder="e.g. 12/401" 
+                                placeholderTextColor="#888"
+                                value={houseId} 
+                                onChangeText={setHouseId} 
+                            />
                             <TouchableOpacity style={styles.searchButton} onPress={fetchHouseData} disabled={loading}>
                                 {loading ? <ActivityIndicator color="white" /> : <Ionicons name="search" size={20} color="white" />}
                             </TouchableOpacity>
@@ -285,7 +291,7 @@ export default function AddNew() {
                                 <Text style={styles.sectionTitle}>Existing Members:</Text>
                                 {existingResidents.map((res, idx) => (
                                     <View key={idx} style={styles.residentItem}>
-                                        <Text style={{ fontSize: 16 }}>👤 {res.name} (Age: {res.age})</Text>
+                                        <Text style={{ fontSize: 16, color: '#444' }}>👤 {res.name} (Age: {res.age})</Text>
                                     </View>
                                 ))}
                             </View>
@@ -314,37 +320,42 @@ export default function AddNew() {
                                     </View>
 
                                     <TextInput
-                                        style={[styles.input, hasError(member.name) && styles.inputError]}
+                                        style={[styles.input, { color: '#333' }, hasError(member.name) && styles.inputError]}
                                         placeholder="Full Name *"
+                                        placeholderTextColor="#888"
                                         value={member.name}
                                         onChangeText={(val) => updateMember(index, 'name', val)}
                                     />
 
                                     <View style={{ flexDirection: 'row', gap: 10 }}>
                                         <TextInput
-                                            style={[styles.input, { flex: 1 }, hasError(member.age) && styles.inputError]}
+                                            style={[styles.input, { flex: 1, color: '#333' }, hasError(member.age) && styles.inputError]}
                                             placeholder="Age *"
+                                            placeholderTextColor="#888"
                                             keyboardType="numeric"
                                             value={member.age}
                                             onChangeText={(val) => updateMember(index, 'age', val)}
                                         />
                                         <TextInput
-                                            style={[styles.input, { flex: 1 }, hasError(member.gender) && styles.inputError]}
+                                            style={[styles.input, { flex: 1, color: '#333' }, hasError(member.gender) && styles.inputError]}
                                             placeholder="Gender (M/F) *"
+                                            placeholderTextColor="#888"
                                             value={member.gender}
                                             onChangeText={(val) => updateMember(index, 'gender', val)}
                                         />
                                     </View>
 
                                     <TextInput
-                                        style={[styles.input, hasError(member.relation) && styles.inputError]}
+                                        style={[styles.input, { color: '#333' }, hasError(member.relation) && styles.inputError]}
                                         placeholder="Relation to Head *"
+                                        placeholderTextColor="#888"
                                         value={member.relation}
                                         onChangeText={(val) => updateMember(index, 'relation', val)}
                                     />
                                     <TextInput
-                                        style={[styles.input, (hasError(member.mobile) || (attemptedSubmit && member.mobile.length !== 10)) && styles.inputError]}
+                                        style={[styles.input, { color: '#333' }, (hasError(member.mobile) || (attemptedSubmit && member.mobile.length !== 10)) && styles.inputError]}
                                         placeholder="Mobile *"
+                                        placeholderTextColor="#888"
                                         maxLength={10}
                                         keyboardType="phone-pad"
                                         value={member.mobile}
@@ -353,22 +364,25 @@ export default function AddNew() {
 
                                     <View style={{ flexDirection: 'row', gap: 10 }}>
                                         <TextInput
-                                            style={[styles.input, { flex: 1 }, hasError(member.weight) && styles.inputError]}
+                                            style={[styles.input, { flex: 1, color: '#333' }, hasError(member.weight) && styles.inputError]}
                                             placeholder="Weight (kg) *"
+                                            placeholderTextColor="#888"
                                             keyboardType="numeric"
                                             value={member.weight}
                                             onChangeText={(val) => updateMember(index, 'weight', val)}
                                         />
                                         <TextInput
-                                            style={[styles.input, { flex: 1 }, hasError(member.bloodPressure) && styles.inputError]}
+                                            style={[styles.input, { flex: 1, color: '#333' }, hasError(member.bloodPressure) && styles.inputError]}
                                             placeholder="BP (120/80) *"
+                                            placeholderTextColor="#888"
                                             value={member.bloodPressure}
                                             onChangeText={(val) => updateMember(index, 'bloodPressure', val)}
                                         />
                                     </View>
                                     <TextInput
-                                        style={[styles.input, hasError(member.sugarLevel) && styles.inputError]}
+                                        style={[styles.input, { color: '#333' }, hasError(member.sugarLevel) && styles.inputError]}
                                         placeholder="Sugar (mg/dL) *"
+                                        placeholderTextColor="#888"
                                         keyboardType="numeric"
                                         value={member.sugarLevel}
                                         onChangeText={(val) => updateMember(index, 'sugarLevel', val)}
@@ -418,7 +432,7 @@ export default function AddNew() {
                                     </View>
 
                                     {member.isPregnant && (
-                                        <View style={[styles.dateDatePickerCardBlock, (attemptedSubmit && !member.lmpDate) && styles.inputError]}>
+                                        <View style={[styles.datePickerCardBlock, (attemptedSubmit && !member.lmpDate) && styles.inputError]}>
                                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                                                 <Text style={[styles.label, { color: '#8E24AA', marginBottom: 0 }]}>Month Calculation (based on LMP)</Text>
 
@@ -447,8 +461,9 @@ export default function AddNew() {
 
                                             {Platform.OS === 'web' ? (
                                                 <TextInput
-                                                    style={[styles.input, { marginTop: 15, marginBottom: 5, padding: 10 }]}
+                                                    style={[styles.input, { marginTop: 15, marginBottom: 5, padding: 10, color: '#333' }]}
                                                     {...({ type: 'date' } as any)}
+                                                    placeholderTextColor="#888"
                                                     value={member.lmpDate ? member.lmpDate.split('T')[0] : ''}
                                                     onChangeText={(text) => {
                                                         if (text) {
@@ -585,7 +600,7 @@ const styles = StyleSheet.create({
     summaryItem: { marginBottom: 8, borderBottomWidth: 1, borderBottomColor: '#f0f0f0', paddingBottom: 5 },
     summaryName: { fontSize: 14, fontWeight: '500', color: '#444' },
     summaryHealthDetail: { color: '#777', fontSize: 12, paddingLeft: 12, marginTop: 2 },
-    dateDatePickerCardBlock: { backgroundColor: '#F3E5F5', padding: 12, borderRadius: 10, marginVertical: 10, borderWidth: 1, borderColor: '#CE93D8' },
+    datePickerCardBlock: { backgroundColor: '#F3E5F5', padding: 12, borderRadius: 10, marginVertical: 10, borderWidth: 1, borderColor: '#CE93D8' },
     dateEditBtn: { backgroundColor: '#8E24AA', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 15 },
     calculationResultBox: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, backgroundColor: 'white', padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#E1BEE7' },
     resultText: { fontSize: 13, color: '#333', fontWeight: 'bold' },

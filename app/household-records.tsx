@@ -1,7 +1,7 @@
 import { View, Text, SectionList, StyleSheet, TouchableOpacity, ActivityIndicator, TextInput, Linking, Alert, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter, useLocalSearchParams } from "expo-router";
-import { useState, useEffect } from "react";
+import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
+import { useState, useCallback } from "react";
 import { db } from "../firebaseConfig";
 import { collection, query, where, getDocs, orderBy, deleteDoc, doc, writeBatch } from "firebase/firestore";
 
@@ -15,33 +15,37 @@ export default function HouseholdRecords() {
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
 
-    useEffect(() => {
-        if (workerMobile) {
-            fetchHouseholdData();
-        }
-    }, [workerMobile]);
+    useFocusEffect(
+        useCallback(() => {
+            if (workerMobile) {
+                fetchHouseholdData();
+            } else {
+                fetchHouseholdData(); // Global fetch fallback
+            }
+        }, [workerMobile])
+    );
 
     const fetchHouseholdData = async () => {
         try {
             setLoading(true);
-            const q = query(
-                collection(db, "household_members"),
-                where("workerId", "==", workerMobile),
-                orderBy("houseId")
-            );
+            const q = workerMobile 
+                ? query(collection(db, "household_members"), where("workerId", "==", workerMobile), orderBy("houseId"))
+                : query(collection(db, "household_members"), orderBy("houseId"));
 
             const querySnapshot = await getDocs(q);
             const list: any[] = [];
-            querySnapshot.forEach((doc) => {
-                list.push({ id: doc.id, ...doc.data() });
+            querySnapshot.forEach((docSnap) => {
+                list.push({ id: docSnap.id, ...docSnap.data() });
             });
 
+            // Group strictly into SectionList compliant format
             const grouped = list.reduce((acc: any[], current: any) => {
                 const house = acc.find(item => item.houseId === current.houseId);
                 if (house) {
                     house.data.push(current);
                 } else {
                     acc.push({
+                        id: current.houseId, // For unique keys
                         houseId: current.houseId,
                         totalInHouse: current.totalMembers || "N/A",
                         data: [current]
@@ -53,52 +57,41 @@ export default function HouseholdRecords() {
             setMembers(grouped);
             setFilteredMembers(grouped);
         } catch (error) {
-            console.error("Error fetching household records: ", error);
+            console.error("Error fetching household records:", error);
         } finally {
             setLoading(false);
         }
     };
 
     const handleDeleteMember = async (memberId: string, name: string) => {
-        console.log("DELETE BUTTON PRESSED for:", name, "ID:", memberId);
-
         if (!memberId) {
-            Alert.alert("Error", "Cannot delete: Invalid Member ID.");
+            Alert.alert("Execution Error", "Invalid Member Instance ID.");
             return;
         }
 
-        // Web's Alert API is limited; fall back to window.confirm so callbacks fire
         const proceed = Platform.OS === 'web'
-            ? window.confirm(`Remove ${name} from this household?`)
+            ? window.confirm(`Permanently remove ${name} from this census registry?`)
             : await new Promise<boolean>(resolve => {
                 Alert.alert(
-                    "Delete Record",
-                    `Are you sure you want to remove ${name} from this household?`,
+                    "Secure Deletion",
+                    `Are you strictly sure you want to sever ${name} from this household?`,
                     [
-                        { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
-                        { text: "Delete", style: "destructive", onPress: () => resolve(true) }
-                    ],
-                    { cancelable: true }
+                        { text: "Abort", style: "cancel", onPress: () => resolve(false) },
+                        { text: "Sever Record", style: "destructive", onPress: () => resolve(true) }
+                    ]
                 );
             });
 
-        if (!proceed) {
-            console.log("Deletion cancelled for", memberId);
-            return;
-        }
+        if (!proceed) return;
 
         try {
             setLoading(true);
-            console.log("Attempting to delete member from Firestore:", memberId);
             await deleteDoc(doc(db, "household_members", String(memberId)));
-            console.log("Successfully deleted member:", memberId);
-            await fetchHouseholdData();
-            if (Platform.OS !== 'web') {
-                Alert.alert("Success", `${name} has been removed.`);
-            }
+            await fetchHouseholdData(); // Re-sync structure natively
+            if (Platform.OS !== 'web') Alert.alert("Record Severed", `${name} has been securely purged.`);
         } catch (error) {
             console.error("Delete Member Error:", error);
-            Alert.alert("Error", "Could not delete member from database. Please check your connection.");
+            Alert.alert("Operation Blocked", "Network timeout or permission rejection.");
         } finally {
             setLoading(false);
         }
@@ -106,45 +99,38 @@ export default function HouseholdRecords() {
 
     const handleDeleteHouse = (houseId: string) => {
         Alert.alert(
-            "Delete Entire Household?",
-            `This will permanently remove House ${houseId} and all members/visit history inside it.`,
+            "Purge Entire Household?",
+            `You are attempting to completely purge Household [${houseId}] and all its connected records/history permanently.`,
             [
-                { text: "Cancel", style: "cancel" },
+                { text: "Abort", style: "cancel" },
                 {
-                    text: "Delete Everything",
+                    text: "Execute Purge",
                     style: "destructive",
                     onPress: async () => {
                         try {
                             setLoading(true);
                             const batch = writeBatch(db);
 
-                            // 1. Find and queue all members for deletion
-                            const membersQ = query(
-                                collection(db, "household_members"),
-                                where("houseId", "==", houseId),
-                                where("workerId", "==", workerMobile)
-                            );
+                            // Delete all connected members
+                            const membersQ = workerMobile
+                                ? query(collection(db, "household_members"), where("houseId", "==", houseId), where("workerId", "==", workerMobile))
+                                : query(collection(db, "household_members"), where("houseId", "==", houseId));
                             const membersSnap = await getDocs(membersQ);
                             membersSnap.forEach((d) => batch.delete(d.ref));
 
-                            // 2. Find and queue all visit logs for deletion
-                            const visitsQ = query(
-                                collection(db, "household_visits"),
-                                where("houseId", "==", houseId),
-                                where("workerId", "==", workerMobile)
-                            );
+                            // Delete all connected visit summaries
+                            const visitsQ = workerMobile
+                                ? query(collection(db, "household_visits"), where("houseId", "==", houseId), where("workerId", "==", workerMobile))
+                                : query(collection(db, "household_visits"), where("houseId", "==", houseId));
                             const visitsSnap = await getDocs(visitsQ);
                             visitsSnap.forEach((d) => batch.delete(d.ref));
 
-                            // 3. Commit the batch to Firestore
                             await batch.commit();
-
-                            // 4. Refresh the UI
                             await fetchHouseholdData();
-                            Alert.alert("Success", `House ${houseId} has been removed.`);
+                            Alert.alert("Purge Successful", `Household [${houseId}] architecture has been completely wiped.`);
                         } catch (error) {
                             console.error("Delete House Error:", error);
-                            Alert.alert("Error", "Failed to delete household. Check your connection.");
+                            Alert.alert("Operation Failed", "Could not purge database batch.");
                         } finally {
                             setLoading(false);
                         }
@@ -171,27 +157,38 @@ export default function HouseholdRecords() {
         setFilteredMembers(filtered);
     };
 
-    const makeCall = (phoneNumber: string) => {
-        if (phoneNumber && phoneNumber.trim().length > 0) {
-            Linking.openURL(`tel:${phoneNumber}`);
-        } else {
-            Alert.alert("No Number", "No phone number was recorded for this family member.");
+    const makeCall = async (phoneNumber: string) => {
+        if (!phoneNumber || phoneNumber.trim().length === 0) {
+            Alert.alert("Invalid Routing", "This resident has no telemetric number recorded.");
+            return;
+        }
+        try {
+            const url = `tel:${phoneNumber.replace(/[^0-9+]/g, '')}`;
+            const supported = await Linking.canOpenURL(url);
+            if (supported) {
+                await Linking.openURL(url);
+            } else {
+                Alert.alert("Unsupported", "Your device hardware cannot initiate calls natively.");
+            }
+        } catch (e) {
+            Alert.alert("Execution Blocked", "Operation denied by OS.");
         }
     };
 
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()}>
+                <TouchableOpacity onPress={() => router.back()} style={{ paddingRight: 15 }}>
                     <Ionicons name="arrow-back" size={24} color="white" />
                 </TouchableOpacity>
-                <Text style={styles.headerText}>Household Records</Text>
+                <Text style={styles.headerText}>Household Matrix</Text>
             </View>
 
             <View style={styles.searchSection}>
                 <Ionicons name="search" size={20} color="#666" style={styles.searchIcon} />
                 <TextInput
-                    placeholder="Search by House ID or Name"
+                    placeholder="Search explicitly by House ID / Resident Name..."
+                    placeholderTextColor="#999"
                     style={styles.searchInput}
                     value={searchQuery}
                     onChangeText={handleSearch}
@@ -199,100 +196,99 @@ export default function HouseholdRecords() {
             </View>
 
             {loading ? (
-                <ActivityIndicator size="large" color="#1F7A6B" style={{ marginTop: 50 }} />
+                <View style={styles.centerBox}>
+                    <ActivityIndicator size="large" color="#1F7A6B" />
+                    <Text style={styles.loadText}>Compiling Secure Matrix...</Text>
+                </View>
             ) : (
                 <SectionList
                     sections={filteredMembers}
-                    keyExtractor={(item) => item.id}
-                    contentContainerStyle={{ padding: 20 }}
-                    stickySectionHeadersEnabled={true}
-                    ListEmptyComponent={<Text style={styles.emptyText}>No matching records found.</Text>}
+                    keyExtractor={(item) => item.id || Math.random().toString()}
+                    contentContainerStyle={{ paddingHorizontal: 15, paddingBottom: 40 }}
+                    stickySectionHeadersEnabled={false}
+                    ListEmptyComponent={
+                        <View style={styles.centerBox}>
+                            <Ionicons name="documents-outline" size={64} color="#ccc" />
+                            <Text style={styles.emptyText}>Zero records matched your parameters.</Text>
+                        </View>
+                    }
                     renderSectionHeader={({ section }) => (
                         <View style={styles.houseHeaderContainer}>
                             <TouchableOpacity
                                 style={styles.houseHeader}
+                                activeOpacity={0.7}
                                 onPress={() => router.push({
-                                    pathname: "/add-new",
-                                    params: {
-                                        mobile: workerMobile,
-                                        houseId: section.houseId,
-                                        role: params.role,
-                                        name: params.name
-                                    }
+                                    pathname: "/household-survey",
+                                    params: { mobile: workerMobile, houseId: section.houseId }
                                 })}
                             >
                                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                    <Ionicons name="home" size={18} color="#1F7A6B" />
-                                    <Text style={styles.houseHeaderText}> House ID: {section.houseId}</Text>
-                                    <Text style={styles.memberCount}>({section.totalInHouse} Members)</Text>
-                                    <Ionicons name="pencil" size={14} color="#666" style={{ marginLeft: 6 }} />
+                                    <View style={styles.heroBox}>
+                                        <Ionicons name="home" size={18} color="white" />
+                                    </View>
+                                    <View>
+                                        <Text style={styles.houseHeaderText}>Resident Core: {section.houseId}</Text>
+                                        <Text style={styles.memberCount}>{section.data.length} Validated / {section.totalInHouse} Expected</Text>
+                                    </View>
                                 </View>
                             </TouchableOpacity>
-                            <TouchableOpacity
-                                onPress={() => handleDeleteHouse(section.houseId)}
-                                style={styles.deleteHouseButton}
-                            >
-                                <Ionicons name="trash-outline" size={20} color="#D32F2F" />
+                            <TouchableOpacity onPress={() => handleDeleteHouse(section.houseId)} style={styles.deleteHouseButton}>
+                                <Ionicons name="trash-bin" size={20} color="#D32F2F" />
                             </TouchableOpacity>
                         </View>
                     )}
                     renderItem={({ item }) => {
                         const chronicList = item.chronicConditions || [];
-                        const hasPriorityChronic =
-                            chronicList.includes("Diabetes") ||
-                            chronicList.includes("Hypertension");
+                        const hasPriorityChronic = chronicList.includes("Diabetes") || chronicList.includes("Hypertension");
 
                         return (
                             <View style={[styles.card, hasPriorityChronic && styles.chronicCard]}>
-
-                                {/* Member Info */}
                                 <TouchableOpacity
-                                    style={{ flex: 1 }}
+                                    style={{ flex: 1, paddingRight: 10 }}
+                                    activeOpacity={0.6}
                                     onPress={() =>
                                         router.push({
-                                            pathname: "./member-profile",
+                                            pathname: "/patient-details",
                                             params: {
-                                                memberId: item.id,
-                                                name: item.name,
-                                                houseId: item.houseId,
+                                                ...item,
                                                 isPregnant: String(item.isPregnant || false),
                                                 isBedridden: String(item.isBedridden || false),
-                                                chronicConditions: JSON.stringify(chronicList)
+                                                chronicConditions: Array.isArray(item.chronicConditions) ? item.chronicConditions.join(", ") : item.chronicConditions
                                             }
                                         })
                                     }
                                 >
                                     <Text style={styles.name}>{item.name}</Text>
-                                    <Text style={styles.subText}>
-                                        {item.relationToHead} • Age: {item.age}
-                                    </Text>
+                                    <Text style={styles.subText}>{item.relationToHead || item.relation} • {item.age} Years Old</Text>
+
+                                    <View style={styles.badgeRow}>
+                                        {item.bloodPressure && item.bloodPressure.trim().length > 0 && (
+                                            <View style={styles.miniBadge}><Text style={styles.badgeText}>🩺 BP: {item.bloodPressure}</Text></View>
+                                        )}
+                                        {item.sugarLevel && item.sugarLevel.trim().length > 0 && (
+                                            <View style={styles.miniBadge}><Text style={styles.badgeText}>🩸 SGR: {item.sugarLevel}</Text></View>
+                                        )}
+                                        {item.isPregnant && (
+                                            <View style={[styles.miniBadge, { backgroundColor: '#FCE4EC', borderColor: '#F8BBD0' }]}>
+                                                <Text style={[styles.badgeText, { color: '#C2185B' }]}>🤰 PREG</Text>
+                                            </View>
+                                        )}
+                                        {hasPriorityChronic && (
+                                            <View style={[styles.miniBadge, { backgroundColor: '#FFEBEE', borderColor: '#FFCDD2' }]}>
+                                                <Text style={[styles.badgeText, { color: '#D32F2F' }]}>⚠️ RISKS</Text>
+                                            </View>
+                                        )}
+                                    </View>
                                 </TouchableOpacity>
 
-                                {/* Delete */}
-                                <TouchableOpacity
-                                    onPress={(e) => {
-                                        // ensure parent row doesn't also handle this press
-                                        e.stopPropagation?.();
-                                        handleDeleteMember(item.id, item.name);
-                                    }}
-                                    style={styles.actionButton}
-                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                >
-                                    <Ionicons name="trash-outline" size={20} color="#D32F2F" />
-                                </TouchableOpacity>
-
-                                {/* Call */}
-                                <TouchableOpacity
-                                    style={[styles.callButton, styles.actionButton]}
-                                    onPress={(e) => {
-                                        e.stopPropagation?.();
-                                        makeCall(item.mobile || item.phone);
-                                    }}
-                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                >
-                                    <Ionicons name="call" size={20} color="white" />
-                                </TouchableOpacity>
-
+                                <View style={styles.actionColumn}>
+                                    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#E8F5E9' }]} onPress={() => makeCall(item.mobile || item.phone)}>
+                                        <Ionicons name="call" size={18} color="#2E7D32" />
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#FFEBEE' }]} onPress={() => handleDeleteMember(item.id, item.name)}>
+                                        <Ionicons name="close" size={18} color="#D32F2F" />
+                                    </TouchableOpacity>
+                                </View>
                             </View>
                         );
                     }}
@@ -304,35 +300,31 @@ export default function HouseholdRecords() {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: "#F4F6F8" },
-    header: { backgroundColor: "#1F7A6B", padding: 20, paddingTop: 50, flexDirection: 'row', alignItems: 'center' },
-    headerText: { color: "white", fontSize: 20, fontWeight: "bold", marginLeft: 15 },
-    searchSection: { flexDirection: 'row', backgroundColor: 'white', margin: 15, borderRadius: 10, alignItems: 'center', paddingHorizontal: 15, elevation: 2 },
+    header: { backgroundColor: "#1F7A6B", padding: 20, paddingTop: 50, flexDirection: 'row', alignItems: 'center', elevation: 4 },
+    headerText: { color: "white", fontSize: 20, fontWeight: "bold", marginLeft: 10 },
+    searchSection: { flexDirection: 'row', backgroundColor: 'white', margin: 15, borderRadius: 12, alignItems: 'center', paddingHorizontal: 15, elevation: 2, borderWidth: 1, borderColor: '#eee' },
     searchIcon: { marginRight: 10 },
-    searchInput: { flex: 1, height: 50, fontSize: 16 },
-    card: { backgroundColor: 'white', padding: 15, borderRadius: 12, marginBottom: 10, flexDirection: 'row', alignItems: 'center', elevation: 2 },
-    actionButton: { marginRight: 10, padding: 5 },
-    name: { fontSize: 16, fontWeight: 'bold', color: '#333' },
-    subText: { color: '#666', fontSize: 13, marginTop: 2 },
-    emptyText: { textAlign: 'center', marginTop: 50, color: '#999' },
-    houseHeaderContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#E0F2F1', borderRadius: 8, marginTop: 15, marginBottom: 8, borderLeftWidth: 4, borderLeftColor: '#1F7A6B' },
-    houseHeader: { flex: 1, padding: 10, flexDirection: 'row', alignItems: 'center' },
-    deleteHouseButton: { padding: 10 },
-    houseHeaderText: { fontWeight: 'bold', color: '#00695C', fontSize: 15 },
-    memberCount: { color: '#666', fontSize: 12, marginLeft: 8 },
-    statusRow: { flexDirection: 'row', marginTop: 8, gap: 10 },
-    statusBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f0f0f0', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12 },
-    statusText: { fontSize: 10, fontWeight: 'bold', marginLeft: 4 },
-    callButton: { backgroundColor: "#4CAF50", padding: 10, borderRadius: 20, elevation: 2 },
-    chronicCard: {
-        borderLeftWidth: 5,
-        borderLeftColor: '#D32F2F',
-        backgroundColor: '#FFF8F8',
-    },
-    chronicLabel: {
-        marginTop: 5,
-        fontSize: 12,
-        fontWeight: 'bold',
-        color: '#D32F2F',
-        fontStyle: 'italic',
-    },
+    searchInput: { flex: 1, height: 50, fontSize: 16, color: '#333' },
+    centerBox: { alignItems: 'center', marginTop: 100 },
+    loadText: { color: '#666', marginTop: 15, fontSize: 16, fontWeight: '500' },
+    emptyText: { color: '#999', marginTop: 15, fontSize: 16, fontStyle: 'italic' },
+    
+    houseHeaderContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#E0F2F1', borderRadius: 12, marginTop: 15, marginBottom: 10, borderWidth: 1, borderColor: '#B2DFDB' },
+    houseHeader: { flex: 1, padding: 12, flexDirection: 'row', alignItems: 'center' },
+    heroBox: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#1F7A6B', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+    houseHeaderText: { fontWeight: 'bold', color: '#004D40', fontSize: 16 },
+    memberCount: { color: '#00695C', fontSize: 12, marginTop: 2 },
+    deleteHouseButton: { padding: 15, paddingLeft: 10 },
+
+    card: { backgroundColor: 'white', padding: 15, borderRadius: 12, marginBottom: 10, flexDirection: 'row', alignItems: 'center', elevation: 1, borderWidth: 1, borderColor: '#eee', marginLeft: 15 },
+    chronicCard: { borderLeftWidth: 4, borderLeftColor: '#D32F2F', backgroundColor: '#FFFAFA' },
+    name: { fontSize: 16, fontWeight: 'bold', color: '#222' },
+    subText: { color: '#666', fontSize: 13, marginTop: 4 },
+    
+    badgeRow: { flexDirection: 'row', marginTop: 8, flexWrap: 'wrap', gap: 6 },
+    miniBadge: { backgroundColor: '#F0F4F3', paddingHorizontal: 6, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: '#E0EAE8' },
+    badgeText: { fontSize: 10, color: '#1F7A6B', fontWeight: 'bold' },
+
+    actionColumn: { flexDirection: 'row', gap: 8 },
+    actionBtn: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' }
 });

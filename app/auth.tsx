@@ -188,6 +188,8 @@ export default function Auth() {
                     ]}>
                         <Picker
                             selectedValue={role}
+                            style={{ color: '#282828ff' }}
+                            dropdownIconColor="#eaeaeaff"
                             onValueChange={(val) => {
                                 if (val !== "")
                                     setRole(val);
@@ -213,6 +215,7 @@ export default function Auth() {
                 )}
                 <TextInput
                     placeholder="Mobile Number"
+                    placeholderTextColor="#666"
                     style={[
                         styles.input,
                         // Optional: turns border red if user started typing but hasn't reached 10 digits
@@ -235,6 +238,7 @@ export default function Auth() {
                 <View style={styles.passwordContainer}>
                     <TextInput
                         placeholder="Password"
+                        placeholderTextColor="#666"
                         secureTextEntry={!showPassword}
                         style={styles.passwordInput}
                         value={password}
@@ -317,6 +321,7 @@ const styles = StyleSheet.create({
         padding: 15,
         borderRadius: 10,
         marginBottom: 15,
+        color: '#333',
     },
     passwordContainer: {
         flexDirection: "row",
@@ -328,6 +333,7 @@ const styles = StyleSheet.create({
     passwordInput: {
         flex: 1,
         padding: 15,
+        color: '#333',
     },
     eyeIcon: {
         padding: 15,

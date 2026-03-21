@@ -112,7 +112,13 @@ export default function MaternalRegistry() {
 
             <View style={styles.searchBar}>
                 <Ionicons name="search" size={20} color="#999" />
-                <TextInput placeholder="Search by name..." style={styles.input} value={search} onChangeText={setSearch} />
+                <TextInput 
+                    placeholder="Search by name..." 
+                    placeholderTextColor="#666"
+                    style={[styles.input, { color: '#333' }]} 
+                    value={search} 
+                    onChangeText={setSearch} 
+                />
             </View>
 
             <FlatList

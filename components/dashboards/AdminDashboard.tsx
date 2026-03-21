@@ -74,7 +74,7 @@ export default function AdminDashboard() {
     const [isNotifModalVisible, setIsNotifModalVisible] = useState(false);
 
     const navigateTo = (path: string, label: string) => {
-        router.push({ pathname: path as any, params: { userMobile: userMobile, title: label } });
+        router.push({ pathname: path as any, params: { userMobile: userMobile, title: label, role: userRole } });
     };
 
     const fetchPendingUsers = async () => {
@@ -346,7 +346,13 @@ export default function AdminDashboard() {
 
                     <View style={styles.searchContainer}>
                         <Ionicons name="search" size={20} color="#999" style={{ marginLeft: 10 }} />
-                        <TextInput style={styles.integratedSearchBar} placeholder="Search by name or mobile..." value={searchQuery} onChangeText={setSearchQuery} />
+                        <TextInput
+                            style={[styles.integratedSearchBar, { color: '#333' }]}
+                            placeholder="Search by name or mobile..."
+                            placeholderTextColor="#666"
+                            value={searchQuery}
+                            onChangeText={setSearchQuery}
+                        />
                     </View>
 
                     <View style={styles.approvalListContainer}>

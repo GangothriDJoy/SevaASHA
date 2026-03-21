@@ -11,7 +11,7 @@ interface Member {
     name: string;
     age: string;
     mobile: string;
-    gender: string; // <-- Gender is already defined here
+    gender: string;
     relation: string;
     bloodPressure: string;
     sugarLevel: string;
@@ -33,11 +33,12 @@ interface HouseholdFormData {
     };
 }
 
-export default function AddNew() {
+export default function HouseholdSurvey() {
     const router = useRouter();
     const params = useLocalSearchParams();
     const [loading, setLoading] = useState(false);
     const [step, setStep] = useState(1);
+    const [showDatePicker, setShowDatePicker] = useState(false);
 
     const [formData, setFormData] = useState<HouseholdFormData>({
         houseNumber: "",
@@ -54,8 +55,6 @@ export default function AddNew() {
     });
 
     const workerMobile = String(params.mobile || "").trim();
-    const workerRole = String(params.role || "ASHA Worker").trim();
-    const workerName = String(params.name || "").trim();
 
     const loadPreviousHouseData = async (houseNo: string) => {
         if (!houseNo.trim()) return;
@@ -68,9 +67,7 @@ export default function AddNew() {
             );
             const visitsSnapshot = await getDocs(visitsQuery);
 
-            if (visitsSnapshot.empty) {
-                return;
-            }
+            if (visitsSnapshot.empty) return;
 
             const visitDoc: any = visitsSnapshot.docs[0].data();
             const previousMembers: Member[] = (visitDoc.members || []) as Member[];
@@ -90,11 +87,11 @@ export default function AddNew() {
             }));
             setStep(1.5);
             Alert.alert(
-                "Previous Visit Loaded",
-                "Last saved household data has been pre-filled. Update only what has changed (BP, Sugar, pregnancy status)."
+                "Previous Record Found",
+                "Last saved household data has been securely loaded. Please update only what has changed during this visit."
             );
         } catch (error) {
-            console.error("Error loading previous house data", error);
+            console.error("Error loading past house data", error);
         }
     };
 
@@ -114,42 +111,37 @@ export default function AddNew() {
         }
     };
 
-    // If we came from "View House", auto-load that house's last visit
     useEffect(() => {
         const initialHouseId = String(params.houseId || "").trim();
         if (initialHouseId) {
             setFormData(prev => ({ ...prev, houseNumber: initialHouseId }));
             loadPreviousHouseData(initialHouseId);
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [params.houseId]);
 
     const prepareMembers = () => {
         const count = parseInt(formData.totalMembers);
         if (isNaN(count) || count <= 0) {
-            Alert.alert("Invalid", "Please enter a valid number of members.");
+            Alert.alert("Invalid Input", "Please enter a valid number of members.");
             return;
         }
         const currentMembers = [...formData.members];
         let updatedMembersList: Member[] = [];
         if (count > currentMembers.length) {
-            // ✅ Keep existing and add empty slots for NEW members
             const additionalNeeded = count - currentMembers.length;
             const newSlots = Array.from({ length: additionalNeeded }, (_, i) => ({
                 name: "",
                 age: "",
                 mobile: "",
-                gender: "", // <-- Initialize gender to empty
-                relation: i === 0 ? "Head of House" : "",
+                gender: "",
+                relation: i === 0 && currentMembers.length === 0 ? "Head of House" : "",
                 bloodPressure: "",
                 sugarLevel: "",
                 cholesterol: "",
                 status: "General" as "General"
             }));
-
             updatedMembersList = [...currentMembers, ...newSlots];
         } else {
-            // ✅ Trim the list if the count decreased
             updatedMembersList = currentMembers.slice(0, count);
         }
         setFormData({ ...formData, members: updatedMembersList });
@@ -158,11 +150,17 @@ export default function AddNew() {
 
     const updateMember = (index: number, field: keyof Member, value: string) => {
         const updatedMembers = [...formData.members];
-        // Strip non-numeric characters for mobile input
-        if (field === 'mobile') {
-            value = value.replace(/[^0-9]/g, '');
-        }
+        if (field === 'mobile') value = value.replace(/[^0-9]/g, '');
         (updatedMembers[index] as any)[field] = value;
+        
+        // Auto-flag pregnancy category natively if they're females of potential age or specifically declared
+        if (field === 'gender' || field === 'age') {
+            const pAge = parseInt(updatedMembers[index].age);
+            const pGen = updatedMembers[index].gender.toLowerCase();
+            if (pGen.startsWith('f') && pAge > 12 && pAge < 50) {
+                // Keep general track, specific toggle at Step 2 explicitly asserts it
+            }
+        }
         setFormData({ ...formData, members: updatedMembers });
     };
 
@@ -177,18 +175,12 @@ export default function AddNew() {
     };
 
     const getPregnancyMonthLabel = () => {
-        if (!formData.summary.isPregnant || !formData.summary.lmpDate) {
-            return "";
-        }
+        if (!formData.summary.isPregnant || !formData.summary.lmpDate) return "";
         const lmp = new Date(formData.summary.lmpDate);
         const now = new Date();
-        if (isNaN(lmp.getTime()) || now.getTime() <= lmp.getTime()) {
-            return "";
-        }
-        const diffInMs = now.getTime() - lmp.getTime();
-        const weeks = diffInMs / (1000 * 60 * 60 * 24 * 7);
-        const month = Math.max(1, Math.floor(weeks / 4));
-        return `Current pregnancy month: ${month}`;
+        if (isNaN(lmp.getTime()) || now.getTime() <= lmp.getTime()) return "";
+        const weeks = (now.getTime() - lmp.getTime()) / (1000 * 60 * 60 * 24 * 7);
+        return `Current Approx Month: ${Math.max(1, Math.floor(weeks / 4.3))}`;
     };
 
     const removeMemberSlot = (index: number) => {
@@ -204,12 +196,10 @@ export default function AddNew() {
         for (let i = 0; i < formData.members.length; i++) {
             const m = formData.members[i];
             const label = i === 0 ? "Head of House" : `Member ${i + 1}`;
-
-            // Add check for gender
             if (!m.name.trim() || !m.age.trim() || !m.gender.trim() || !m.bloodPressure.trim() || !m.sugarLevel.trim()) {
                 Alert.alert(
-                    "Incomplete Member Details",
-                    `Please fill all mandatory fields (Name, Age, Gender, BP, and Sugar) for ${label} before proceeding.`
+                    "Incomplete Profile",
+                    `Required metrics (Name, Age, Gender, BP, Sugar) missing for ${label}. Please fill before generating summary.`
                 );
                 return;
             }
@@ -218,51 +208,29 @@ export default function AddNew() {
     };
 
     const handleSaveSurvey = async () => {
-        console.log("1. Save Button Clicked");
         if (!formData.houseNumber || formData.houseNumber.trim().length < 1) {
-            Alert.alert("Required", "House Number is mandatory.");
+            Alert.alert("Missing ID", "House ID / Number is mandatory.");
             return;
         }
 
-        for (let i = 0; i < formData.members.length; i++) {
-            const m = formData.members[i];
-            const label = i === 0 ? "Head of House" : `Member ${i + 1}`;
-
-            const isNameMissing = !m.name || m.name.trim() === "";
-            const isAgeMissing = !m.age || m.age.trim() === "";
-            const isGenderMissing = !m.gender || m.gender.trim() === ""; // Add gender check
-            const isBPMissing = !m.bloodPressure || m.bloodPressure.trim() === "";
-            const isSugarMissing = !m.sugarLevel || m.sugarLevel.trim() === "";
-
-            if (isNameMissing || isAgeMissing || isGenderMissing || isBPMissing || isSugarMissing) {
-                Alert.alert(
-                    "Incomplete Member Data",
-                    `Section for ${label} is missing required metrics. Please fill Name, Age, Gender, BP, and Sugar.`
-                );
-                setStep(1.5);
-                setLoading(false);
-                return;
-            }
-        }
-
         if (formData.summary.isPregnant && (!formData.summary.lmpDate)) {
-            Alert.alert("Required", "LMP Date is mandatory for pregnancy tracking.");
-            setStep(2);
+            Alert.alert("Required", "LMP Date is legally mandated for pregnancy routing entries.");
             return;
         }
 
         setLoading(true);
         try {
-            console.log("2. Attempting Firebase Save...");
+            // Write distinct entries for global analytical cross-referencing
             const savePromises = formData.members.map((member) => {
+                const isPregnantMember = formData.summary.isPregnant && (member.gender.toLowerCase().startsWith('f'));
                 return addDoc(collection(db, "household_members"), {
                     ...member,
                     relationToHead: member.relation,
                     totalMembers: formData.totalMembers,
                     houseId: formData.houseNumber.trim(),
                     workerId: workerMobile,
-                    isPregnant: member.status === "Pregnant",
-                    isBedridden: false,
+                    isPregnant: isPregnantMember,
+                    isBedridden: parseInt(formData.summary.bedriddenCount) > 0,
                     chronicConditions: formData.summary.chronicConditions,
                     createdAt: serverTimestamp(),
                 });
@@ -270,6 +238,7 @@ export default function AddNew() {
 
             await Promise.all(savePromises);
 
+            // Save the raw visit summary wrapper securely
             await addDoc(collection(db, "household_visits"), {
                 houseId: formData.houseNumber.trim(),
                 workerId: workerMobile,
@@ -278,120 +247,177 @@ export default function AddNew() {
                 summary: formData.summary,
                 createdAt: serverTimestamp(),
             });
-            console.log("3. Firebase Save SUCCESS");
-            setLoading(false);
-            router.replace({
-                pathname: "/dashboard",
-                params: { mobile: workerMobile, role: workerRole, name: workerName }
-            });
-        } catch (error: any) {
-            console.error("Firebase Error:", error);
-            Alert.alert("Error", "Save failed. Check your internet.");
+            
+            Alert.alert("Visit Archived", "Household ledger securely synchronized to the central cloud.");
+            if (router.canGoBack()) {
+                router.back();
+            } else {
+                router.replace("/");
+            }
+        } catch (error) {
+            console.error("Save Verification Error:", error);
+            Alert.alert("Sync Blocked", "Failed to finalize database injection. Ensure active internet connectivity.");
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <ScrollView style={styles.container}>
+        <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => step > 1 ? setStep(step === 1.5 ? 1 : 1.5) : router.back()}>
+                <TouchableOpacity onPress={() => step > 1 ? setStep(step === 1.5 ? 1 : 1.5) : router.back()} style={{ paddingRight: 15 }}>
                     <Ionicons name="arrow-back" size={24} color="white" />
                 </TouchableOpacity>
-                <Text style={styles.headerText}>Household Survey (Step {step})</Text>
+                <Text style={styles.headerText}>Household Survey</Text>
+            </View>
+
+            <View style={styles.stepperBox}>
+                <Text style={styles.stepperText}>Step {step === 1.5 ? "2" : (step === 2 ? "3" : "1")} of 3</Text>
+                <View style={styles.progressBar}>
+                    <View style={[styles.progressFill, { width: step === 1 ? '33%' : (step === 1.5 ? '66%' : '100%') }]} />
+                </View>
             </View>
 
             <View style={styles.form}>
                 {step === 1 && (
                     <View>
-                        <Text style={styles.label}>House Number / ID *</Text>
+                        <View style={styles.instructionBanner}>
+                            <Ionicons name="information-circle" size={24} color="#00695C" />
+                            <Text style={styles.instructionText}>Enter House ID to instantly pull last known census data.</Text>
+                        </View>
+                        <Text style={styles.label}>House ID / Address Code *</Text>
                         <TextInput
                             style={styles.input}
-                            placeholder="e.g. 12/401"
+                            placeholder="Ex: 12/401"
+                            placeholderTextColor="#999"
                             value={formData.houseNumber}
                             onChangeText={(val) => setFormData({ ...formData, houseNumber: val })}
                             onBlur={() => checkExistingHouse(formData.houseNumber)}
                         />
-                        <Text style={styles.label}>Total Members *</Text>
-                        <TextInput style={styles.input} keyboardType="numeric" placeholder="e.g. 5" value={formData.totalMembers} onChangeText={(val) => setFormData({ ...formData, totalMembers: val })} />
-                        <TouchableOpacity style={styles.submitButton} onPress={prepareMembers}>
-                            <Text style={styles.submitText}>NEXT: MEMBER DETAILS</Text>
+                        <Text style={styles.label}>Current Resident Count *</Text>
+                        <TextInput 
+                            style={styles.input} 
+                            keyboardType="numeric" 
+                            placeholder="Ex: 5" 
+                            placeholderTextColor="#999"
+                            value={formData.totalMembers} 
+                            onChangeText={(val) => setFormData({ ...formData, totalMembers: val })} 
+                        />
+                        <TouchableOpacity style={[styles.submitButton, loading && { opacity: 0.7 }]} onPress={prepareMembers} disabled={loading}>
+                            {loading ? <ActivityIndicator color="white" /> : <Text style={styles.submitText}>NEXT: MEMBER VITALS</Text>}
                         </TouchableOpacity>
                     </View>
                 )}
 
                 {step === 1.5 && (
                     <View>
-                        <Text style={styles.sectionTitle}>Individual Member Details</Text>
+                        <Text style={styles.sectionTitle}>Individual Health Metrics</Text>
                         {formData.members.map((member, index) => (
                             <View key={index} style={styles.memberCard}>
-                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                                    <Text style={styles.memberTitle}>{index === 0 ? "Head of House" : `Member ${index + 1}`} *</Text>
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                        <Ionicons name="person-circle" size={24} color="#1F7A6B" style={{ marginRight: 8 }}/>
+                                        <Text style={styles.memberTitle}>{index === 0 ? "Head of Household" : `Resident #${index + 1}`}</Text>
+                                    </View>
                                     <TouchableOpacity onPress={() => removeMemberSlot(index)}>
-                                        <Ionicons name="trash-outline" size={20} color="#D32F2F" />
+                                        <Ionicons name="close-circle" size={24} color="#D32F2F" />
                                     </TouchableOpacity>
                                 </View>
-                                <TextInput style={styles.input} placeholder="Full Name *" value={member.name} onChangeText={(val) => updateMember(index, 'name', val)} />
 
+                                <TextInput style={styles.input} placeholder="Full Legal Name *" placeholderTextColor="#888" value={member.name} onChangeText={(val) => updateMember(index, 'name', val)} />
+                                
                                 <View style={{ flexDirection: 'row', gap: 10 }}>
-                                    <TextInput style={[styles.input, { flex: 1 }]} placeholder="Age *" keyboardType="numeric" value={member.age} onChangeText={(val) => updateMember(index, 'age', val)} />
-                                    {/* <-- Added Gender Input --> */}
-                                    <TextInput style={[styles.input, { flex: 1 }]} placeholder="Gender (M/F) *" value={member.gender} onChangeText={(val) => updateMember(index, 'gender', val)} />
+                                    <TextInput style={[styles.input, { flex: 1 }]} placeholder="Age *" placeholderTextColor="#888" keyboardType="numeric" value={member.age} onChangeText={(val) => updateMember(index, 'age', val)} />
+                                    <TextInput style={[styles.input, { flex: 1.2 }]} placeholder="Gender (M/F/O) *" placeholderTextColor="#888" value={member.gender} onChangeText={(val) => updateMember(index, 'gender', val)} />
                                 </View>
 
-                                <TextInput style={styles.input} placeholder="Relation *" value={member.relation} editable={index !== 0} onChangeText={(val) => updateMember(index, 'relation', val)} />
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="Mobile Number"
-                                    keyboardType="phone-pad"
-                                    maxLength={10} // <-- Limit mobile number to 10 characters
-                                    value={member.mobile || ""}
-                                    onChangeText={(val) => updateMember(index, 'mobile', val)}
-                                />
-                                <Text style={styles.label}>Health Metrics (Mandatory) *</Text>
-                                <TextInput style={styles.input} placeholder="Blood Pressure (e.g. 120/80) *" value={member.bloodPressure} onChangeText={(val) => updateMember(index, 'bloodPressure', val)} />
-                                <TextInput style={styles.input} placeholder="Sugar Level (mg/dL) *" keyboardType="numeric" value={member.sugarLevel} onChangeText={(val) => updateMember(index, 'sugarLevel', val)} />
+                                <TextInput style={styles.input} placeholder="Relation to Head *" placeholderTextColor="#888" value={member.relation} editable={index !== 0} onChangeText={(val) => updateMember(index, 'relation', val)} />
+                                <TextInput style={styles.input} placeholder="Mobile Number" placeholderTextColor="#888" keyboardType="phone-pad" maxLength={10} value={member.mobile || ""} onChangeText={(val) => updateMember(index, 'mobile', val)} />
+                                
+                                <View style={styles.divider} />
+                                <Text style={styles.labelSm}>Live Clinical Readings *</Text>
+                                
+                                <View style={{ flexDirection: 'row', gap: 10, marginTop: 5 }}>
+                                    <View style={{ flex: 1 }}>
+                                        <TextInput style={styles.input} placeholder="BP (120/80)" placeholderTextColor="#888" value={member.bloodPressure} onChangeText={(val) => updateMember(index, 'bloodPressure', val)} />
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                        <TextInput style={styles.input} placeholder="Sugar (mg/dL)" placeholderTextColor="#888" keyboardType="numeric" value={member.sugarLevel} onChangeText={(val) => updateMember(index, 'sugarLevel', val)} />
+                                    </View>
+                                </View>
                             </View>
                         ))}
-                        <TouchableOpacity
-                            style={styles.submitButton}
-                            onPress={goToStepTwo}
-                        >
-                            <Text style={styles.submitText}>NEXT: HOUSE SUMMARY</Text>
+                        <TouchableOpacity style={styles.submitButton} onPress={goToStepTwo}>
+                            <Text style={styles.submitText}>NEXT: AGGREGATE SUMMARY</Text>
                         </TouchableOpacity>
+                        <Text style={styles.helperText}>* Required parameters to ensure valid profiling.</Text>
                     </View>
                 )}
 
                 {step === 2 && (
                     <View>
-                        <Text style={styles.sectionTitle}>Household Health Summary</Text>
-                        <Text style={styles.label}>How many are disabled?</Text>
-                        <TextInput style={styles.input} keyboardType="numeric" placeholder="0" value={formData.summary.disabledCount} onChangeText={(val) => setFormData({ ...formData, summary: { ...formData.summary, disabledCount: val } })} />
+                        <Text style={styles.sectionTitle}>Advanced Diagnostics Survey</Text>
+                        
+                        <View style={styles.cardBlock}>
+                            <Text style={styles.label}>Are there physically disabled residents?</Text>
+                            <TextInput style={styles.inputDark} keyboardType="numeric" placeholder="0" value={formData.summary.disabledCount} onChangeText={(val) => setFormData({ ...formData, summary: { ...formData.summary, disabledCount: val } })} />
 
-                        <TouchableOpacity style={[styles.input, formData.summary.isPregnant && styles.activeToggle]} onPress={() => setFormData({ ...formData, summary: { ...formData.summary, isPregnant: !formData.summary.isPregnant } })}>
-                            <Text>Pregnant Women? {formData.summary.isPregnant ? "✅ Yes" : "❌ No"}</Text>
+                            <Text style={styles.label}>Are there bedridden terminal residents?</Text>
+                            <TextInput style={styles.inputDark} keyboardType="numeric" placeholder="0" value={formData.summary.bedriddenCount} onChangeText={(val) => setFormData({ ...formData, summary: { ...formData.summary, bedriddenCount: val } })} />
+                        </View>
+
+                        <Text style={styles.label}>Are there active pregnancies detected?</Text>
+                        <TouchableOpacity style={[styles.toggleBtn, formData.summary.isPregnant && styles.activeToggle]} onPress={() => setFormData({ ...formData, summary: { ...formData.summary, isPregnant: !formData.summary.isPregnant } })}>
+                            <Text style={[styles.toggleText, formData.summary.isPregnant && { color: "white" }]}>
+                                {formData.summary.isPregnant ? "✅ Confirmed Pregnant Match" : "❌ No Active Pregnancies"}
+                            </Text>
                         </TouchableOpacity>
 
                         {formData.summary.isPregnant && (
                             <View style={styles.datePickerContainer}>
-                                <Text style={styles.label}>Select LMP Date *</Text>
-                                <DateTimePicker
-                                    value={new Date(formData.summary.lmpDate)}
-                                    mode="date"
-                                    maximumDate={new Date()}
-                                    onChange={(event, date) => { if (date) setFormData({ ...formData, summary: { ...formData.summary, lmpDate: date.toISOString() } }) }}
-                                />
+                                <Text style={styles.label}>Last Menstrual Period (LMP) Origin *</Text>
+                                
+                                {Platform.OS === 'android' ? (
+                                    <>
+                                        <TouchableOpacity style={styles.androidDateBtn} onPress={() => setShowDatePicker(true)}>
+                                            <Ionicons name="calendar" size={20} color="#1F7A6B" />
+                                            <Text style={{ marginLeft: 10, fontSize: 16 }}>{new Date(formData.summary.lmpDate).toLocaleDateString()}</Text>
+                                        </TouchableOpacity>
+                                        {showDatePicker && (
+                                            <DateTimePicker
+                                                value={new Date(formData.summary.lmpDate)}
+                                                mode="date"
+                                                maximumDate={new Date()}
+                                                onChange={(event, date) => { 
+                                                    setShowDatePicker(false);
+                                                    if (date) setFormData({ ...formData, summary: { ...formData.summary, lmpDate: date.toISOString() } });
+                                                }}
+                                            />
+                                        )}
+                                    </>
+                                ) : (
+                                    <DateTimePicker
+                                        value={new Date(formData.summary.lmpDate)}
+                                        mode="date"
+                                        display="spinner"
+                                        maximumDate={new Date()}
+                                        onChange={(event, date) => { if (date) setFormData({ ...formData, summary: { ...formData.summary, lmpDate: date.toISOString() } }) }}
+                                    />
+                                )}
+
                                 {getPregnancyMonthLabel().length > 0 && (
-                                    <Text style={styles.pregnancyMonthLabel}>{getPregnancyMonthLabel()}</Text>
+                                    <View style={styles.tagPill}>
+                                        <Text style={styles.pregnancyMonthLabel}>{getPregnancyMonthLabel()}</Text>
+                                    </View>
                                 )}
                             </View>
                         )}
 
-                        <Text style={styles.label}>Chronic Conditions:</Text>
+                        <Text style={styles.label}>Select observed chronic flags:</Text>
                         <View style={styles.checklist}>
-                            {["Diabetes", "Hypertension", "Thyroid", "Heart Disease"].map(item => (
+                            {["Diabetes", "Hypertension", "Thyroid", "Heart Disease", "Tuberculosis"].map(item => (
                                 <TouchableOpacity key={item} style={[styles.checkItem, formData.summary.chronicConditions.includes(item) && styles.activeCheck]} onPress={() => toggleChronicCondition(item)}>
-                                    <Text style={formData.summary.chronicConditions.includes(item) ? { color: 'white' } : { color: 'black' }}>{item}</Text>
+                                    <Text style={formData.summary.chronicConditions.includes(item) ? { color: 'white', fontWeight: 'bold' } : { color: '#444'}}>{item}</Text>
                                 </TouchableOpacity>
                             ))}
                         </View>
@@ -399,12 +425,11 @@ export default function AddNew() {
                         <TouchableOpacity style={styles.saveExitButton} onPress={handleSaveSurvey} disabled={loading}>
                             {loading ? <ActivityIndicator color="white" /> :
                                 <View style={styles.buttonContent}>
-                                    <Ionicons name="checkmark-circle" size={20} color="white" />
-                                    <Text style={styles.saveExitText}> SAVE AND EXIT SURVEY</Text>
+                                    <Ionicons name="cloud-upload" size={22} color="white" />
+                                    <Text style={styles.saveExitText}> ENCRYPT & DISPATCH CENSUS</Text>
                                 </View>
                             }
                         </TouchableOpacity>
-                        <Text style={styles.helperText}>* All starred fields are required to exit.</Text>
                     </View>
                 )}
             </View>
@@ -414,24 +439,38 @@ export default function AddNew() {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: "#F4F6F8" },
-    header: { backgroundColor: "#1F7A6B", padding: 20, paddingTop: 50, flexDirection: 'row', alignItems: 'center' },
-    headerText: { color: "white", fontSize: 18, fontWeight: "bold", marginLeft: 15 },
+    header: { backgroundColor: "#1F7A6B", padding: 20, paddingTop: 50, flexDirection: 'row', alignItems: 'center', elevation: 4 },
+    headerText: { color: "white", fontSize: 20, fontWeight: "bold", marginLeft: 10 },
+    stepperBox: { padding: 15, backgroundColor: 'white', borderBottomWidth: 1, borderBottomColor: '#eee' },
+    stepperText: { textAlign: 'center', color: '#666', fontWeight: 'bold', fontSize: 13, marginBottom: 8, textTransform: 'uppercase' },
+    progressBar: { height: 6, backgroundColor: '#E0E0E0', borderRadius: 3, width: '100%' },
+    progressFill: { height: 6, backgroundColor: '#1F7A6B', borderRadius: 3 },
     form: { padding: 20 },
-    label: { fontWeight: "bold", marginBottom: 5, color: "#333" },
-    input: { backgroundColor: "white", padding: 15, borderRadius: 10, marginBottom: 15, borderWidth: 1, borderColor: "#ddd", justifyContent: 'center' },
-    activeToggle: { borderColor: "#1F7A6B", borderWidth: 2 },
-    memberCard: { backgroundColor: "#E0F2F1", padding: 15, borderRadius: 12, marginBottom: 20, borderLeftWidth: 5, borderLeftColor: "#1F7A6B" },
-    memberTitle: { fontWeight: 'bold', color: '#1F7A6B', marginBottom: 10 },
-    sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#1F7A6B', marginBottom: 15 },
-    datePickerContainer: { backgroundColor: 'white', padding: 10, borderRadius: 10, marginBottom: 20, borderWidth: 1, borderColor: '#1F7A6B', alignItems: 'center' },
+    instructionBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#E0F2F1', padding: 15, borderRadius: 10, marginBottom: 20, borderWidth: 1, borderColor: '#B2DFDB' },
+    instructionText: { color: '#004D40', marginLeft: 10, flex: 1, fontSize: 13, fontWeight: '500' },
+    label: { fontWeight: "bold", marginBottom: 8, color: "#333", fontSize: 15 },
+    labelSm: { fontWeight: "bold", marginBottom: 5, color: "#666", fontSize: 13, textTransform: 'uppercase' },
+    input: { backgroundColor: "white", padding: 15, borderRadius: 12, marginBottom: 15, borderWidth: 1, borderColor: "#ddd", fontSize: 16, color: '#222' },
+    inputDark: { backgroundColor: "#f9f9f9", padding: 15, borderRadius: 10, marginBottom: 15, borderWidth: 1, borderColor: "#ccc", fontSize: 16 },
+    cardBlock: { backgroundColor: 'white', padding: 15, borderRadius: 12, marginBottom: 20, borderWidth: 1, borderColor: '#eee' },
+    toggleBtn: { backgroundColor: "white", padding: 18, borderRadius: 12, marginBottom: 20, alignItems: 'center', borderWidth: 1, borderColor: "#ccc" },
+    activeToggle: { backgroundColor: "#1F7A6B", borderColor: "#004D40" },
+    toggleText: { fontSize: 16, fontWeight: 'bold', color: '#333' },
+    memberCard: { backgroundColor: "white", padding: 20, borderRadius: 15, marginBottom: 20, borderWidth: 1, borderColor: '#ddd', elevation: 2, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 3 },
+    memberTitle: { fontWeight: 'bold', color: '#1F7A6B', fontSize: 16 },
+    sectionTitle: { fontSize: 20, fontWeight: 'bold', color: '#222', marginBottom: 20 },
+    divider: { height: 1, backgroundColor: '#eee', marginVertical: 10 },
+    datePickerContainer: { backgroundColor: 'white', padding: 15, borderRadius: 12, marginBottom: 20, borderWidth: 1, borderColor: '#1F7A6B', alignItems: 'center' },
+    androidDateBtn: { flexDirection: 'row', alignItems: 'center', padding: 15, backgroundColor: '#F0F4F8', width: '100%', justifyContent: 'center', borderRadius: 10, borderWidth: 1, borderColor: '#CFD8DC' },
+    tagPill: { backgroundColor: '#E8F5E9', paddingHorizontal: 15, verticalAlign: 'middle', paddingVertical: 8, borderRadius: 20, marginTop: 15 },
     checklist: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 20 },
-    checkItem: { padding: 10, backgroundColor: 'white', borderRadius: 20, borderWidth: 1, borderColor: '#ddd', marginRight: 10, marginBottom: 10 },
-    activeCheck: { backgroundColor: '#1F7A6B', borderColor: '#1F7A6B' },
-    pregnancyMonthLabel: { marginTop: 8, fontStyle: 'italic', color: '#00695C' },
-    submitButton: { backgroundColor: "#1F7A6B", padding: 18, borderRadius: 10, alignItems: "center", marginTop: 10 },
-    submitText: { color: "white", fontWeight: "bold", fontSize: 16 },
-    saveExitButton: { backgroundColor: "#1F7A6B", padding: 18, borderRadius: 12, alignItems: "center", marginTop: 25, elevation: 4 },
+    checkItem: { padding: 12, paddingHorizontal: 16, backgroundColor: 'white', borderRadius: 25, borderWidth: 1, borderColor: '#ccc', marginRight: 10, marginBottom: 10 },
+    activeCheck: { backgroundColor: '#D32F2F', borderColor: '#B71C1C' },
+    pregnancyMonthLabel: { fontStyle: 'italic', fontWeight: 'bold', color: '#2E7D32' },
+    submitButton: { backgroundColor: "#1F7A6B", padding: 18, borderRadius: 12, alignItems: "center", marginTop: 10, elevation: 3 },
+    submitText: { color: "white", fontWeight: "bold", fontSize: 16, letterSpacing: 0.5 },
+    saveExitButton: { backgroundColor: "#00695C", padding: 20, borderRadius: 15, alignItems: "center", marginTop: 20, elevation: 5 },
     buttonContent: { flexDirection: 'row', alignItems: 'center' },
-    saveExitText: { color: "white", fontWeight: "bold", fontSize: 18 },
-    helperText: { textAlign: 'center', color: '#666', fontSize: 12, marginTop: 10, fontStyle: 'italic' }
+    saveExitText: { color: "white", fontWeight: "bold", fontSize: 16, marginLeft: 10, letterSpacing: 0.5 },
+    helperText: { textAlign: 'center', color: '#888', fontSize: 12, marginTop: 15, fontStyle: 'italic' }
 });

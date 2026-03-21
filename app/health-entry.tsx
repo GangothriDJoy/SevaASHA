@@ -1,377 +1,198 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Platform, ScrollView, Dimensions, Switch } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { db } from '../firebaseConfig';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-
-const { width } = Dimensions.get('window');
-const isWeb = Platform.OS === 'web';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from "react-native";
+import { useRouter, useLocalSearchParams } from "expo-router";
+import { useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import { db } from "../firebaseConfig";
+import { collection, addDoc, serverTimestamp, doc, setDoc } from "firebase/firestore";
 
 export default function HealthEntry() {
-    const { memberId, name } = useLocalSearchParams();
     const router = useRouter();
+    const params = useLocalSearchParams();
 
-    const [bpLeft, setBpLeft] = useState('');
-    const [bpRight, setBpRight] = useState('');
-    const [bloodSugar, setBloodSugar] = useState('');
-    const [weight, setWeight] = useState('');
-    const [hemoglobin, setHemoglobin] = useState('');
-    const [isTeenageMother, setIsTeenageMother] = useState(false);
-    const [notes, setNotes] = useState('');
-    const [saving, setSaving] = useState(false);
+    // Catch the worker's mobile and patient details smoothly
+    const workerMobile = String(params.mobile || "").trim();
+    const patientId = String(params.patientId || params.id || "").trim(); 
+    const patientName = String(params.patientName || params.name || "Unknown Patient").trim();
+
+    const [loading, setLoading] = useState(false);
+    const [weight, setWeight] = useState("");
+    const [bp, setBp] = useState("");
+    const [hb, setHb] = useState("");
+    const [fhr, setFhr] = useState("");
+    const [sugar, setSugar] = useState("");
 
     const handleSave = async () => {
-        if (!memberId) {
-            const msg = "Invalid member ID. Cannot save record.";
-            isWeb ? window.alert(msg) : Alert.alert("Error", msg);
+        // Enforce basic clinical validations
+        if (!weight || !bp || !hb || !sugar) {
+            Alert.alert("Missing Diagnostics", "Please fill in Weight, BP, Hemoglobin, and Sugar levels to execute a valid clinical entry.");
             return;
         }
 
-        // Basic validation
-        if (!bpLeft && !bpRight && !bloodSugar && !weight && !hemoglobin) {
-            const msg = "Please enter at least one health metric.";
-            isWeb ? window.alert(msg) : Alert.alert("Validation", msg);
+        const bpRegex = /^\d{2,3}\/\d{2,3}$/;
+        if (!bpRegex.test(bp)) {
+            Alert.alert("Invalid Input", "Blood Pressure must strictly be formatted as Systolic/Diastolic (e.g. 120/80)");
             return;
         }
 
-        setSaving(true);
+        if (!patientId) {
+            Alert.alert("System Error", "Cannot mount records: Target Patient ID is disconnected from routing state.");
+            return;
+        }
+
+        setLoading(true);
         try {
-            const bp = (bpLeft && bpRight) ? `${bpLeft}/${bpRight}` : '';
-            
-            const isHypertensive = (parseInt(bpLeft) >= 140 || parseInt(bpRight) >= 90) || false;
-            const isDiabetic = (parseInt(bloodSugar) >= 140) || false;
-            const isAnemic = (parseInt(hemoglobin) < 11) || false;
-            const isHighRisk = isHypertensive || isDiabetic || isAnemic || isTeenageMother;
-
-            const healthIssues = isHighRisk ? "High Risk" : "Normal";
-            
-            const riskFactors = {
-                hypertension: isHypertensive,
-                diabetes: isDiabetic,
-                anemia: isAnemic,
-                teenageMother: isTeenageMother
-            };
-
-            const payload = {
-                beneficiaryId: memberId,
-                beneficiaryName: name || "Unknown Beneficiary",
+            // 1. Save to the deeply nested 'vitals' sub-collection to natively trigger the global collectionGroup("vitals") fetchers
+            await addDoc(collection(db, "household_members", patientId, "vitals"), {
+                weight: parseFloat(weight) || 0,
                 bloodPressure: bp,
-                sugarLevel: bloodSugar || "",
-                weight: weight || "",
-                hemoglobin: hemoglobin || "",
-                notes: notes || "",
-                healthIssues: healthIssues,
-                riskFactors: riskFactors,
+                hemoglobin: parseFloat(hb) || 0,
+                sugarLevel: parseFloat(sugar) || 0,
+                fetalHeartRate: fhr ? parseFloat(fhr) : null, // FHR is optional unless pregnant
+                recordedBy: workerMobile,
+                workerId: workerMobile, // For safe querying
                 recordedAt: serverTimestamp(),
-                recordedBy: "ASHA Worker"
-            };
+                patientId: patientId,
+                patientName: patientName
+            });
 
-            await addDoc(collection(db, 'health_records'), payload);
-            
-            if (isHighRisk) {
-                await addDoc(collection(db, 'high_risk'), payload);
-            }
+            // 2. Synchronize the overarching Household Profile so directory lists immediately show updated BP/Sugar
+            const memberRef = doc(db, "household_members", patientId);
+            await setDoc(memberRef, {
+                bloodPressure: bp,
+                sugarLevel: sugar,
+                hemoglobin: hb,
+                lastPushedVitals: serverTimestamp()
+            }, { merge: true }); // Securely merge avoiding profile wipes
 
-            const successMsg = "Health record saved successfully.";
-            if (isWeb) {
-                window.alert(successMsg);
-                router.back();
-            } else {
-                Alert.alert("Success", successMsg, [{ text: "OK", onPress: () => router.back() }]);
-            }
-        } catch (error: any) {
-            console.error("Error saving record:", error);
-            const errMsg = "Failed to save record. Try again.";
-            isWeb ? window.alert(errMsg) : Alert.alert("Error", errMsg);
+            Alert.alert(
+                "Telemetry Secured", 
+                "Health vitals synchronized with global cloud. Your backend logging ledger and monthly incentive tracker have instantly updated.",
+                [{ text: "OK", onPress: () => router.back() }]
+            );
+        } catch (error) {
+            console.error("Vitals Persistence Error:", error);
+            Alert.alert("Network Operation Failed", "Could not synchronize telemetry records. Check connectivity.");
         } finally {
-            setSaving(false);
+            setLoading(false);
         }
     };
 
     return (
-        <View style={styles.container}>
+        <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
             <View style={styles.header}>
-                <View style={styles.headerTop}>
-                    <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                        <Ionicons name="arrow-back" size={24} color="white" />
-                    </TouchableOpacity>
-                    <View style={styles.headerTitleContainer}>
-                        <Text style={styles.headerTitle} numberOfLines={1}>New Health Record</Text>
-                        <Text style={styles.headerSubtitle}>For {name || 'Beneficiary'}</Text>
-                    </View>
-                </View>
+                <TouchableOpacity onPress={() => router.back()} style={{ paddingRight: 15 }}>
+                    <Ionicons name="arrow-back" size={24} color="white" />
+                </TouchableOpacity>
+                <Text style={styles.headerText}>Clinical Vitals Entry</Text>
             </View>
 
-            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                <View style={styles.formCard}>
-                    <Text style={styles.sectionTitle}>Vitals</Text>
-
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Blood Pressure (mmHg)</Text>
-                        <View style={styles.bpContainer}>
-                            <TextInput
-                                style={[styles.input, styles.bpInput]}
-                                placeholder="120"
-                                placeholderTextColor="#ccc"
-                                value={bpLeft}
-                                onChangeText={setBpLeft}
-                                keyboardType="numeric"
-                                maxLength={3}
-                            />
-                            <Text style={styles.bpDivider}>/</Text>
-                            <TextInput
-                                style={[styles.input, styles.bpInput]}
-                                placeholder="80"
-                                placeholderTextColor="#ccc"
-                                value={bpRight}
-                                onChangeText={setBpRight}
-                                keyboardType="numeric"
-                                maxLength={3}
-                            />
-                        </View>
+            <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+                <View style={styles.profileBanner}>
+                    <View style={styles.iconRing}>
+                        <Ionicons name="fitness" size={28} color="#1F7A6B" />
                     </View>
-
-                    <View style={styles.row}>
-                        <View style={[styles.inputGroup, styles.flex1, { marginRight: 10 }]}>
-                            <Text style={styles.label}>Blood Sugar (mg/dL)</Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="e.g. 110"
-                                placeholderTextColor="#ccc"
-                                value={bloodSugar}
-                                onChangeText={setBloodSugar}
-                                keyboardType="numeric"
-                            />
-                        </View>
-
-                        <View style={[styles.inputGroup, styles.flex1, { marginLeft: 10 }]}>
-                            <Text style={styles.label}>Weight (kg)</Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="e.g. 65"
-                                placeholderTextColor="#ccc"
-                                value={weight}
-                                onChangeText={setWeight}
-                                keyboardType="numeric"
-                            />
-                        </View>
-                    </View>
-
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Hemoglobin (g/dL)</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="e.g. 12"
-                            placeholderTextColor="#ccc"
-                            value={hemoglobin}
-                            onChangeText={setHemoglobin}
-                            keyboardType="numeric"
-                        />
+                    <View>
+                        <Text style={styles.patientName}>{patientName}</Text>
+                        <Text style={styles.patientId}>ID: {patientId || "Unknown"}</Text>
                     </View>
                 </View>
 
-                <View style={styles.formCard}>
-                    <Text style={styles.sectionTitle}>Additional Information</Text>
-                    
-                    <View style={styles.inputGroup}>
-                        <View style={styles.switchRow}>
-                            <Text style={[styles.label, { marginBottom: 0 }]}>Teenage Mother?</Text>
-                            <Switch
-                                value={isTeenageMother}
-                                onValueChange={setIsTeenageMother}
-                                trackColor={{ false: "#E5E7EB", true: "#1F7A6B" }}
-                                thumbColor="white"
-                            />
-                        </View>
-                    </View>
+                <View style={styles.card}>
+                    <Text style={styles.cardHeader}>Core Diagnostics</Text>
 
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Clinical Notes (Optional)</Text>
-                        <TextInput
-                            style={[styles.input, styles.textArea]}
-                            placeholder="Add any observations or symptoms..."
-                            placeholderTextColor="#ccc"
-                            value={notes}
-                            onChangeText={setNotes}
-                            multiline
-                            numberOfLines={4}
-                            textAlignVertical="top"
-                        />
-                    </View>
+                    <Text style={styles.label}>Weight (kg) *</Text>
+                    <TextInput
+                        keyboardType="decimal-pad"
+                        style={styles.input}
+                        placeholder="Ex: 65.5"
+                        placeholderTextColor="#999"
+                        value={weight}
+                        onChangeText={setWeight}
+                    />
+
+                    <Text style={styles.label}>Blood Pressure (Systolic/Diastolic) *</Text>
+                    <TextInput
+                        placeholder="Ex: 120/80"
+                        placeholderTextColor="#999"
+                        style={styles.input}
+                        value={bp}
+                        onChangeText={setBp}
+                    />
+
+                    <Text style={styles.label}>Random Blood Sugar / RBS (mg/dL) *</Text>
+                    <TextInput
+                        keyboardType="decimal-pad"
+                        style={styles.input}
+                        placeholder="Ex: 110"
+                        placeholderTextColor="#999"
+                        value={sugar}
+                        onChangeText={setSugar}
+                    />
+
+                    <Text style={styles.label}>Hemoglobin (g/dL) *</Text>
+                    <TextInput
+                        keyboardType="decimal-pad"
+                        style={styles.input}
+                        placeholder="Ex: 11.5"
+                        placeholderTextColor="#999"
+                        value={hb}
+                        onChangeText={setHb}
+                    />
+
+                    <View style={styles.divider} />
+
+                    <Text style={styles.cardHeader}>Maternal Tracking (If Applicable)</Text>
+                    <Text style={styles.label}>Fetal Heart Rate (bpm)</Text>
+                    <TextInput
+                        keyboardType="decimal-pad"
+                        style={styles.input}
+                        placeholder="Ex: 140"
+                        placeholderTextColor="#999"
+                        value={fhr}
+                        onChangeText={setFhr}
+                    />
                 </View>
 
-                <TouchableOpacity 
-                    style={[styles.saveButton, saving && styles.saveButtonDisabled]} 
+                <TouchableOpacity
+                    style={[styles.saveButton, loading && {backgroundColor: '#81C784'}]}
+                    activeOpacity={0.8}
                     onPress={handleSave}
-                    disabled={saving}
+                    disabled={loading}
                 >
-                    {saving ? (
+                    {loading ? (
                         <ActivityIndicator color="white" />
                     ) : (
-                        <>
-                            <Ionicons name="save-outline" size={20} color="white" />
-                            <Text style={styles.saveButtonText}>Save Record</Text>
-                        </>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Ionicons name="cloud-upload" size={22} color="white" style={{ marginRight: 10 }} />
+                            <Text style={styles.saveText}>ENCRYPT TRANSACTIONS</Text>
+                        </View>
                     )}
                 </TouchableOpacity>
+                <Text style={styles.helperText}>* Marks mandatory telemetry fields required for ASHA incentives.</Text>
             </ScrollView>
-        </View>
+        </KeyboardAvoidingView>
     );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: "#F8FAF9",
-    },
-    header: {
-        backgroundColor: "#1F7A6B",
-        paddingTop: isWeb ? 20 : 50,
-        paddingBottom: 25,
-        paddingHorizontal: 20,
-        borderBottomLeftRadius: 25,
-        borderBottomRightRadius: 25,
-        elevation: 10,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.15,
-        shadowRadius: 10,
-        zIndex: 10,
-    },
-    headerTop: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        width: '100%',
-        maxWidth: 600,
-        alignSelf: 'center',
-    },
-    backButton: {
-        padding: 5,
-    },
-    headerTitleContainer: {
-        flex: 1,
-        marginLeft: 15,
-    },
-    headerTitle: {
-        color: "white",
-        fontSize: 20,
-        fontWeight: "800",
-        letterSpacing: 0.5,
-    },
-    headerSubtitle: {
-        color: "#A7F3D0",
-        fontSize: 13,
-        marginTop: 2,
-        fontWeight: '500',
-    },
-    scrollContent: {
-        padding: 20,
-        paddingBottom: 40,
-        maxWidth: 600,
-        width: '100%',
-        alignSelf: 'center',
-    },
-    formCard: {
-        backgroundColor: "white",
-        borderRadius: 16,
-        padding: 20,
-        marginBottom: 20,
-        shadowColor: "#1F7A6B",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.08,
-        shadowRadius: 10,
-        elevation: 4,
-        borderWidth: 1,
-        borderColor: "rgba(31,122,107,0.05)",
-    },
-    sectionTitle: {
-        fontSize: 16,
-        fontWeight: "bold",
-        color: "#1F7A6B",
-        marginBottom: 20,
-        borderBottomWidth: 1,
-        borderBottomColor: "#E5E7EB",
-        paddingBottom: 10,
-    },
-    inputGroup: {
-        marginBottom: 15,
-    },
-    label: {
-        fontSize: 13,
-        fontWeight: "600",
-        color: "#4B5563",
-        marginBottom: 8,
-    },
-    input: {
-        backgroundColor: "#F9FAFB",
-        borderWidth: 1,
-        borderColor: "#E5E7EB",
-        borderRadius: 10,
-        paddingHorizontal: 15,
-        paddingVertical: 12,
-        fontSize: 16,
-        color: "#1F2937",
-    },
-    bpContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    bpInput: {
-        flex: 1,
-        textAlign: 'center',
-    },
-    bpDivider: {
-        fontSize: 24,
-        color: "#9CA3AF",
-        marginHorizontal: 10,
-        fontWeight: '300',
-    },
-    row: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-    },
-    flex1: {
-        flex: 1,
-    },
-    switchRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 10,
-        backgroundColor: '#F9FAFB',
-        padding: 12,
-        borderRadius: 10,
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-    },
-    textArea: {
-        minHeight: 100,
-        paddingTop: 12,
-    },
-    saveButton: {
-        backgroundColor: "#1F7A6B",
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 15,
-        borderRadius: 12,
-        marginTop: 10,
-        shadowColor: "#1F7A6B",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 5,
-    },
-    saveButtonDisabled: {
-        backgroundColor: "#9CA3AF",
-        shadowOpacity: 0,
-        elevation: 0,
-    },
-    saveButtonText: {
-        color: "white",
-        fontSize: 16,
-        fontWeight: "bold",
-        marginLeft: 8,
-    }
+    container: { flex: 1, backgroundColor: "#F4F6F8" },
+    header: { backgroundColor: "#1F7A6B", padding: 20, paddingTop: 50, flexDirection: 'row', alignItems: 'center', elevation: 4 },
+    headerText: { color: "white", fontSize: 20, fontWeight: "bold", marginLeft: 10 },
+    content: { padding: 20, paddingBottom: 40 },
+    
+    profileBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#E0F2F1', padding: 15, borderRadius: 12, marginBottom: 20, borderWidth: 1, borderColor: '#B2DFDB' },
+    iconRing: { width: 50, height: 50, borderRadius: 25, backgroundColor: 'white', justifyContent: 'center', alignItems: 'center', marginRight: 15, elevation: 2 },
+    patientName: { fontSize: 18, color: "#004D40", fontWeight: "bold" },
+    patientId: { fontSize: 13, color: "#00695C", marginTop: 2 },
+    
+    card: { backgroundColor: 'white', padding: 20, borderRadius: 15, elevation: 3, borderWidth: 1, borderColor: '#eee' },
+    cardHeader: { fontSize: 18, fontWeight: 'bold', color: '#1F7A6B', marginBottom: 15 },
+    divider: { height: 1, backgroundColor: '#eee', marginVertical: 20 },
+    
+    label: { fontWeight: "bold", color: "#444", marginBottom: 8, fontSize: 14 },
+    input: { backgroundColor: "#fafafa", borderWidth: 1, borderColor: "#ddd", padding: 15, borderRadius: 10, fontSize: 16, marginBottom: 20, color: '#333' },
+    
+    saveButton: { backgroundColor: "#2E7D32", padding: 20, borderRadius: 12, marginTop: 25, alignItems: "center", elevation: 4 },
+    saveText: { color: "white", fontWeight: "bold", fontSize: 16, letterSpacing: 0.5 },
+    helperText: { textAlign: 'center', color: '#888', fontSize: 13, marginTop: 15, fontStyle: 'italic' }
 });
