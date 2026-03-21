@@ -4,7 +4,7 @@
     "slug": "SevaASHA",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./icon.jpeg",
+    "icon": "./logo.jpeg",
     "scheme": "sevaasha",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -21,7 +21,7 @@
       ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./icon.jpeg"
+        "foregroundImage": "./logo.jpeg"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -29,14 +29,14 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./icon.jpeg"
+      "favicon": "./logo.jpeg"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./icon.jpeg",
+          "image": "./logo.jpeg",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
