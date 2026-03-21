@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, Image } from "react-native";
 import { useRouter } from "expo-router";
 
 export default function Landing() {
@@ -6,8 +6,12 @@ export default function Landing() {
 
     return (
         <View style={styles.container}>
-            <View style={styles.logo}>
-                <Text style={styles.logoText}>LOGO</Text>
+            <View style={styles.logoContainer}>
+                <Image
+                    source={require('../logo.jpeg')}
+                    style={styles.logo}
+                    resizeMode="cover"
+                />
             </View>
 
             <Text style={styles.title}>SevaASHA</Text>
@@ -35,13 +39,13 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
     },
     logo: {
-        width: 110,
-        height: 110,
         backgroundColor: "white",
         borderRadius: 60,
         justifyContent: "center",
         alignItems: "center",
         marginBottom: 30,
+        width: '125%',         // Give it some "breathing room" inside the circle
+        height: '125%',
     },
     logoText: {
         color: "#1F7A6B",
@@ -68,5 +72,22 @@ const styles = StyleSheet.create({
         color: "#1F7A6B",
         fontWeight: "bold",
         fontSize: 16,
+    },
+    logoContainer: {
+        width: 180,           // Size of the circle
+        height: 180,
+        backgroundColor: '#FFFFFF', // This hides the logo's white edges
+        borderRadius: 90,     // Perfect circle
+        justifyContent: 'center',
+        alignItems: 'center',
+        alignSelf: 'center',
+        marginBottom: 30,
+        // Professional Shadow
+        elevation: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 5,
+        overflow: 'hidden',   // Ensures the image doesn't bleed out
     },
 });
