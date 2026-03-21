@@ -37,7 +37,7 @@ export default function AddNew() {
     const [houseId, setHouseId] = useState("");
     const [existingResidents, setExistingResidents] = useState<any[]>([]);
 
-    const [showDatePickerMap, setShowDatePickerMap] = useState<{[key: number]: boolean}>({});
+    const [showDatePickerMap, setShowDatePickerMap] = useState<{ [key: number]: boolean }>({});
     const [attemptedSubmit, setAttemptedSubmit] = useState(false);
 
     const [formData, setFormData] = useState({
@@ -184,7 +184,7 @@ export default function AddNew() {
 
         for (let i = 0; i < formData.members.length; i++) {
             const m = formData.members[i];
-            const memberName = m.name.trim() || `Member ${i+1}`;
+            const memberName = m.name.trim() || `Member ${i + 1}`;
 
             const hasEmptyField = mandatoryFields.some(field => {
                 const value = m[field];
@@ -419,12 +419,12 @@ export default function AddNew() {
 
                                     {member.isPregnant && (
                                         <View style={[styles.dateDatePickerCardBlock, (attemptedSubmit && !member.lmpDate) && styles.inputError]}>
-                                            <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
-                                                <Text style={[styles.label, {color: '#8E24AA', marginBottom: 0}]}>Month Calculation (based on LMP)</Text>
+                                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <Text style={[styles.label, { color: '#8E24AA', marginBottom: 0 }]}>Month Calculation (based on LMP)</Text>
 
                                                 {Platform.OS !== 'web' && (
                                                     <TouchableOpacity onPress={() => toggleDatePicker(index)} style={styles.dateEditBtn}>
-                                                        <Text style={{color: 'white', fontSize: 12}}>
+                                                        <Text style={{ color: 'white', fontSize: 12 }}>
                                                             {showDatePickerMap[index] && Platform.OS === 'ios' ? "Done" : (member.lmpDate ? "Change Date" : "Select Date")}
                                                         </Text>
                                                     </TouchableOpacity>
@@ -433,7 +433,7 @@ export default function AddNew() {
 
                                             {member.lmpDate && (
                                                 <View style={styles.calculationResultBox}>
-                                                    <Text style={styles.resultText}>LMP: <Text style={{fontWeight: 'normal'}}>{new Date(member.lmpDate).toLocaleDateString()}</Text></Text>
+                                                    <Text style={styles.resultText}>LMP: <Text style={{ fontWeight: 'normal' }}>{new Date(member.lmpDate).toLocaleDateString()}</Text></Text>
                                                     <View style={styles.monthPill}>
                                                         <Text style={styles.monthNumber}>{currentMonth || "?"}</Text>
                                                         <Text style={styles.monthLabel}>Month</Text>
@@ -493,7 +493,7 @@ export default function AddNew() {
                             );
                         })}
 
-                        <TouchableOpacity style={styles.addMoreBtn} onPress={() => setFormData({ members: [...formData.members, generateBlankMember()]})}>
+                        <TouchableOpacity style={styles.addMoreBtn} onPress={() => setFormData({ members: [...formData.members, generateBlankMember()] })}>
                             <Text style={styles.addMoreText}>+ ADD ANOTHER PERSON</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.submitButton} onPress={proceedToSummary}><Text style={styles.submitText}>NEXT: HEALTH SUMMARY</Text></TouchableOpacity>
@@ -512,7 +512,7 @@ export default function AddNew() {
                                     <View key={idx} style={styles.summaryItem}>
                                         <Text style={styles.summaryName}>• {m.name} (Age: {m.age})</Text>
                                         <Text style={styles.summaryHealthDetail}>
-                                            Current: <Text style={{fontWeight: 'bold', color: '#E91E63'}}>Month {calculatePregnancyMonth(m.lmpDate)}</Text> (LMP: {new Date(m.lmpDate).toLocaleDateString()})
+                                            Current: <Text style={{ fontWeight: 'bold', color: '#E91E63' }}>Month {calculatePregnancyMonth(m.lmpDate)}</Text> (LMP: {new Date(m.lmpDate).toLocaleDateString()})
                                         </Text>
                                     </View>
                                 ))}

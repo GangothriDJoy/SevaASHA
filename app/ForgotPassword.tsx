@@ -20,7 +20,7 @@ export default function ForgotPassword() {
         }
 
         setLoading(true);
-        const db = getFirestore( "default");
+        const db = getFirestore("default");
 
         try {
             console.log("Attempting to reach Firestore project: sevaasha-af74c");

@@ -9,18 +9,39 @@ export default function AwwDashboard() {
     const router = useRouter();
     const params = useLocalSearchParams();
     const { role, name } = useLocalSearchParams();
-    
+
     const userName = String(name || "Anganwadi Worker").trim();
     const userRole = String(role || "Anganwadi Worker").trim();
 
     // Mock Dashboard Stats for AWW
     const awwStats = {
-        totalChildren: 42, 
-        pregnantMothers: 12, 
-        nutriAlerts: 3, 
-        vaccineDue: 5, 
+        totalChildren: 42,
+        pregnantMothers: 12,
+        nutriAlerts: 3,
+        vaccineDue: 5,
         pendingStock: "80%"
     };
+    
+    const [globalBroadcasts, setGlobalBroadcasts] = React.useState<any[]>([]);
+
+    React.useEffect(() => {
+        import('firebase/firestore').then(({ collection, query, orderBy, limit, onSnapshot }) => {
+            import('@/firebaseConfig').then(({ db }) => {
+                const qBroadcasts = query(collection(db, "broadcasts"), orderBy("createdAt", "desc"), limit(10));
+                const unsubBroadcasts = onSnapshot(qBroadcasts, (snapshot) => {
+                    const list: any[] = [];
+                    snapshot.forEach(doc => {
+                        const data = doc.data();
+                        if (data.target === userRole || data.target === "All" || (!data.target)) {
+                            list.push({ id: doc.id, ...data });
+                        }
+                    });
+                    setGlobalBroadcasts(list);
+                });
+                return () => unsubBroadcasts();
+            });
+        });
+    }, [userRole]);
 
     const handleEmergency = () => {
         Alert.alert(
@@ -47,11 +68,11 @@ export default function AwwDashboard() {
                             <Text style={styles.headerTitle}>ANGANAWADI CENTRE</Text>
                             <Text style={styles.subHeaderText}>Welcome back, {userName}</Text>
                         </View>
-                        <TouchableOpacity style={styles.profileBtn} activeOpacity={0.7}>
+                        <TouchableOpacity style={styles.profileBtn} activeOpacity={0.7} onPress={() => router.push({ pathname: '/settings', params: { role: userRole, name: userName } })}>
                             <Ionicons name="person-circle" size={32} color="#FFCCBC" />
                         </TouchableOpacity>
                     </View>
-                    
+
                     {/* Floating Summary Dashboard */}
                     <View style={styles.headerMetricsCard}>
                         <View style={styles.metricBlock}>
@@ -74,13 +95,27 @@ export default function AwwDashboard() {
                 </View>
 
                 <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                    
+
+                    {globalBroadcasts.length > 0 && (
+                        <View style={{ marginBottom: 15 }}>
+                            {globalBroadcasts.map((bc) => (
+                                <View key={bc.id} style={styles.broadcastBox}>
+                                    <Ionicons name="megaphone" size={20} color="#E65100" />
+                                    <View style={{ flex: 1, marginLeft: 10 }}>
+                                        <Text style={{ color: '#E65100', fontWeight: 'bold', fontSize: 13 }}>Central Broadcast for {bc.target}</Text>
+                                        <Text style={{ color: '#E65100', fontSize: 14, marginTop: 2 }}>{bc.message}</Text>
+                                    </View>
+                                </View>
+                            ))}
+                        </View>
+                    )}
+
                     {/* --- 2. CENTER MANAGEMENT GRID --- */}
                     <View style={styles.sectionHeader}>
                         <Text style={styles.sectionTitle}>Center Management</Text>
                         <Ionicons name="apps" size={20} color="#D84315" />
                     </View>
-                    
+
                     <View style={styles.grid}>
                         <TouchableOpacity style={styles.gridBtn} activeOpacity={0.7}>
                             <View style={[styles.btnIcon, { backgroundColor: '#FFF3E0' }]}>
@@ -109,14 +144,14 @@ export default function AwwDashboard() {
                             </View>
                             <Text style={styles.btnLabel}>Attendance</Text>
                         </TouchableOpacity>
-                        
+
                         <TouchableOpacity style={styles.gridBtn} activeOpacity={0.7}>
                             <View style={[styles.btnIcon, { backgroundColor: '#F3E5F5' }]}>
                                 <Ionicons name="color-palette" size={28} color="#8E24AA" />
                             </View>
                             <Text style={styles.btnLabel}>Activities</Text>
                         </TouchableOpacity>
-                        
+
                         <TouchableOpacity style={styles.gridBtn} activeOpacity={0.7}>
                             <View style={[styles.btnIcon, { backgroundColor: '#E8EAF6' }]}>
                                 <Ionicons name="document-text" size={28} color="#3F51B5" />
@@ -127,7 +162,7 @@ export default function AwwDashboard() {
 
                     {/* --- 3. ALERTS & TRACKING CARDS --- */}
                     <Text style={[styles.sectionTitle, { marginTop: 15, marginBottom: 10 }]}>Tracking & Inventory</Text>
-                    
+
                     {/* Vaccine Follow-up Card */}
                     <TouchableOpacity style={styles.wideAlertCard} activeOpacity={0.8}>
                         <View style={[styles.cardIconBox, { backgroundColor: '#F3E5F5' }]}>
@@ -183,14 +218,14 @@ const emergencyShadow = Platform.select({
 const styles = StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: "#D84315" },
     container: { flex: 1, backgroundColor: "#FFFBF9" }, // Very soft warm white
-    
+
     // --- Header Styles ---
-    header: { 
-        backgroundColor: "#D84315", 
-        paddingHorizontal: 20, 
-        paddingTop: Platform.OS === 'android' ? 20 : 10, 
+    header: {
+        backgroundColor: "#D84315",
+        paddingHorizontal: 20,
+        paddingTop: Platform.OS === 'android' ? 20 : 10,
         paddingBottom: 45,
-        borderBottomLeftRadius: 30, 
+        borderBottomLeftRadius: 30,
         borderBottomRightRadius: 30,
         zIndex: 10
     },
@@ -200,7 +235,7 @@ const styles = StyleSheet.create({
     headerTitle: { color: "white", fontSize: 18, fontWeight: "800", letterSpacing: 0.5 },
     subHeaderText: { color: "#FFCCBC", fontSize: 13, marginTop: 2, fontWeight: "500" },
     profileBtn: { padding: 4, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20 },
-    
+
     // --- Floating Metrics Card ---
     headerMetricsCard: {
         flexDirection: 'row',
@@ -228,14 +263,14 @@ const styles = StyleSheet.create({
 
     // --- Grid System ---
     grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-    gridBtn: { 
-        backgroundColor: '#FFFFFF', 
-        width: '31%', 
-        paddingVertical: 18, 
+    gridBtn: {
+        backgroundColor: '#FFFFFF',
+        width: '31%',
+        paddingVertical: 18,
         paddingHorizontal: 5,
-        borderRadius: 20, 
-        alignItems: 'center', 
-        marginBottom: 15, 
+        borderRadius: 20,
+        alignItems: 'center',
+        marginBottom: 15,
         ...shadowConfig,
         borderWidth: 1,
         borderColor: '#F9F9F9'
@@ -281,5 +316,6 @@ const styles = StyleSheet.create({
     },
     emergencyTextWrap: { flex: 1 },
     emergencyTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '900', letterSpacing: 0.5, marginBottom: 4 },
-    emergencySubText: { color: '#FFCDD2', fontSize: 12, lineHeight: 18, fontWeight: '500' }
+    emergencySubText: { color: '#FFCDD2', fontSize: 12, lineHeight: 18, fontWeight: '500' },
+    broadcastBox: { backgroundColor: '#FFF3E0', padding: 15, borderRadius: 10, flexDirection: 'row', alignItems: 'center', borderColor: '#FFCC80', borderWidth: 1, marginBottom: 8 }
 });

@@ -45,13 +45,13 @@ export default function UniversalList() {
             </View>
             <View style={styles.searchBox}>
                 <Ionicons name="search" size={20} color="#666" />
-                <TextInput style={{flex: 1, marginLeft: 10}} placeholder="Search records..." value={search} onChangeText={setSearch} />
+                <TextInput style={{ flex: 1, marginLeft: 10 }} placeholder="Search records..." value={search} onChangeText={setSearch} />
             </View>
-            {loading ? <ActivityIndicator size="large" color="#1F7A6B" style={{marginTop: 50}} /> : (
+            {loading ? <ActivityIndicator size="large" color="#1F7A6B" style={{ marginTop: 50 }} /> : (
                 <FlatList
                     data={filtered}
                     keyExtractor={(item) => item.id}
-                    renderItem={({item}) => (
+                    renderItem={({ item }) => (
                         <TouchableOpacity style={styles.card}>
                             <View>
                                 <Text style={styles.name}>{item.name || `${item.firstName} ${item.lastName}`}</Text>

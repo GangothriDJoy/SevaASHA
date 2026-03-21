@@ -156,14 +156,14 @@ export default function Register() {
                             found = true;
                             break;
                         }
-                    }if (isMounted) {
+                    } if (isMounted) {
                         setDbDuplicate(found);
                         console.log("Database Check Result:", found); // Debugging line
                     }
                 } catch (error) {
                     console.error("Error checking mobile:", error);
                 } finally {
-                    if(isMounted) setIsCheckingMobile(false);
+                    if (isMounted) setIsCheckingMobile(false);
                 }
             } else {
                 setDbDuplicate(false);
@@ -171,14 +171,14 @@ export default function Register() {
             }
         };
         checkMobileInDB();
-        return() => {
+        return () => {
             isMounted = false;
         };
     }, [formData.mobile, formData.countryCode]);
 
     const handleRegister = async () => {
         const { mobile, password, fullName, role } = formData;
-        if (!mobile || !password || !fullName || role === "" || role ==="-Select-") {
+        if (!mobile || !password || !fullName || role === "" || role === "-Select-") {
             const msg = "Please fill in all required fields.";
             Platform.OS === 'web' ? alert(msg) : Alert.alert("Error", msg);
             return;
@@ -229,14 +229,14 @@ export default function Register() {
         } catch (error: any) {
             let errorMsg = error.message;
             if (error.code === 'auth/email-already-in-use') errorMsg = "This mobile number is already registered!";
-            if (error.code === 'auth/weak-password') errorMsg="Password should be at least 6 characters.";
+            if (error.code === 'auth/weak-password') errorMsg = "Password should be at least 6 characters.";
             console.error("Firebase Error:", error);
             console.error("Registration Error:", error);
             // If Database fails but Auth succeeds, you might want to handle that here
             Alert.alert("Error", error.message);
             if (Platform.OS === 'web') {
                 alert("Error: " + errorMsg);
-            }else {
+            } else {
                 Alert.alert("Registration Failed", errorMsg);
             }
         }
@@ -282,7 +282,7 @@ export default function Register() {
                         Fields marked with <Text style={styles.mandatoryStar}>*</Text> are required
                     </Text>
                     <Text style={styles.sectionTitle}>1. Select Account Type</Text>
-                    <RequiredLabel text="Select Role"/>
+                    <RequiredLabel text="Select Role" />
 
                     {Platform.OS === "web" ? (
                         /* --- 💻 LAPTOP / WEB DROPDOWN --- */
@@ -387,7 +387,7 @@ export default function Register() {
                                 </Picker>
                             </View>
                         )}
-                        <TextInput style={[styles.input, styles.flexInput, dbDuplicate ? { borderColor: 'red' } : null, { height: 50, color: "#000", outlineStyle: 'none', marginTop: 0, marginBottom: 0 } as any]} keyboardType="phone-pad" value={formData.mobile} onChangeText={(val) => updateField("mobile", val.replace(/[^0-9]/g, ''))} maxLength={countryCodeRules[formData.countryCode]}  />
+                        <TextInput style={[styles.input, styles.flexInput, dbDuplicate ? { borderColor: 'red' } : null, { height: 50, color: "#000", outlineStyle: 'none', marginTop: 0, marginBottom: 0 } as any]} keyboardType="phone-pad" value={formData.mobile} onChangeText={(val) => updateField("mobile", val.replace(/[^0-9]/g, ''))} maxLength={countryCodeRules[formData.countryCode]} />
                     </View>
                     <View>
                         {/* 1. Show 'Checking...' while the Firebase query is running */}
@@ -440,7 +440,7 @@ export default function Register() {
                                     }}
                                 >
                                     {Object.keys(countryCodeRules).map(code => (
-                                        <option key={code} value={code} style={{ color: '#000'}}>
+                                        <option key={code} value={code} style={{ color: '#000' }}>
                                             {code}
                                         </option>
                                     ))}
@@ -702,13 +702,13 @@ export default function Register() {
                                 }}
                             />
                             <RequiredLabel text="Ward Number" />
-                            <TextInput style={styles.input} keyboardType="number-pad" value={formData.wardNo} onChangeText={(val) => { const numericValue= val.replace(/[^0-9]/g, '');updateField("wardNo", numericValue);}} />
+                            <TextInput style={styles.input} keyboardType="number-pad" value={formData.wardNo} onChangeText={(val) => { const numericValue = val.replace(/[^0-9]/g, ''); updateField("wardNo", numericValue); }} />
                             <RequiredLabel text="Ward Name" />
                             <TextInput style={styles.input} onChangeText={(val) => updateField("wardName", val)} />
                             <RequiredLabel text="Assigned Area" />
                             <TextInput style={styles.input} onChangeText={(val) => updateField("assignedArea", val)} />
                             <RequiredLabel text="Supervisor Name" />
-                            <TextInput style={styles.input} value={formData.workersupervisorName} onChangeText={(val) => {const lettersOnly = val.replace(/[0-9]/g, "");updateField("workersupervisorName", lettersOnly);}}/>
+                            <TextInput style={styles.input} value={formData.workersupervisorName} onChangeText={(val) => { const lettersOnly = val.replace(/[0-9]/g, ""); updateField("workersupervisorName", lettersOnly); }} />
                         </>
                     )}
 
@@ -735,7 +735,7 @@ export default function Register() {
                                 }}
                             />
                             <RequiredLabel text="Supervisor Name" />
-                            <TextInput style={styles.input} value={formData.jphnsupervisorName} onChangeText={(val) => {const lettersOnly = val.replace(/[0-9]/g, "");updateField("jphnsupervisorName", lettersOnly);}}/>
+                            <TextInput style={styles.input} value={formData.jphnsupervisorName} onChangeText={(val) => { const lettersOnly = val.replace(/[0-9]/g, ""); updateField("jphnsupervisorName", lettersOnly); }} />
                         </>
                     )}
 
@@ -754,7 +754,7 @@ export default function Register() {
                             <TextInput style={styles.input} keyboardType="email-address" autoCapitalize="none" onChangeText={(val) => updateField("officialEmail", val)} />
                             <RequiredLabel text="Designation" />
                             <TextInput style={styles.input} onChangeText={(val) => updateField("designation", val)} />
-                            <RequiredLabel text="Reporting Authority"/>
+                            <RequiredLabel text="Reporting Authority" />
                             <View style={styles.pickerContainer}>
                                 {Platform.OS === "web" ? (
                                     /* --- 💻 LAPTOP / WEB VIEW --- */
@@ -810,8 +810,8 @@ export default function Register() {
                     {formData.role === "Mother" && (
                         <>
                             <Text style={styles.sectionTitle}>Guardian Details</Text>
-                            <RequiredLabel text="Guardian's Name"/>
-                            <TextInput style={styles.input} value={formData.guardianName} onChangeText={(val) => {const lettersOnly = val.replace(/[0-9]/g, "");updateField("guardianName", lettersOnly);}}/>
+                            <RequiredLabel text="Guardian's Name" />
+                            <TextInput style={styles.input} value={formData.guardianName} onChangeText={(val) => { const lettersOnly = val.replace(/[0-9]/g, ""); updateField("guardianName", lettersOnly); }} />
 
                             {/* --- Guardian Mobile Number Row --- */}
                             <RequiredLabel text="Guardian's Mobile Number" />
@@ -871,7 +871,7 @@ export default function Register() {
                                         Needs {countryCodeRules[formData.guardianCountryCode]} digits.
                                     </Text>
                                 )}
-                            <RequiredLabel text="Guardian's Aadhar Number"/>
+                            <RequiredLabel text="Guardian's Aadhar Number" />
                             <TextInput style={styles.input} keyboardType="number-pad" value={formData.guardianAadhaar} onChangeText={(val) => updateField("guardianAadhaar", val.replace(/[^0-9]/g, ''))} maxLength={12} />
                             {formData.guardianAadhaar.length > 0 && !isguardianAadhaarValid && <Text style={styles.warningText}>Aadhaar must be exactly 12 digits</Text>}
                             {isguardianAadhaarValid && <Text style={styles.successText}>✓ Valid Aadhaar Format</Text>}
@@ -931,7 +931,7 @@ export default function Register() {
                             {formData.pregnancyStatus === "Pregnant" && (
                                 <>
 
-                                    <RequiredLabel text="Last Menstrual Period (LMP)"/>
+                                    <RequiredLabel text="Last Menstrual Period (LMP)" />
 
                                     {Platform.OS === "web" ? (
                                         /* --- 💻 LAPTOP / WEB DATE PICKER --- */
@@ -1083,7 +1083,7 @@ export default function Register() {
                                 <>
                                     {formData.hasChildren === "Yes" && (
                                         <>
-                                            <RequiredLabel text="How many children?"/>
+                                            <RequiredLabel text="How many children?" />
                                             <TextInput
                                                 style={styles.input}
                                                 keyboardType="number-pad"
@@ -1094,13 +1094,13 @@ export default function Register() {
                                             {formData.childrenDetails.map((child, index) => (
                                                 <View key={index} style={{ marginBottom: 20, padding: 15, backgroundColor: '#eee', borderRadius: 10 }}>
                                                     <Text style={{ fontWeight: 'bold', marginBottom: 10 }}>Child {index + 1} Details</Text>
-                                                    <RequiredLabel text="Child Name"/>
+                                                    <RequiredLabel text="Child Name" />
                                                     <TextInput
                                                         style={styles.input}
                                                         value={child.name}
                                                         onChangeText={(val) => updateChildField(index, "name", val)}
                                                     />
-                                                    <RequiredLabel text="Age"/>
+                                                    <RequiredLabel text="Age" />
                                                     <TextInput
                                                         style={styles.input}
                                                         keyboardType="number-pad"
@@ -1108,10 +1108,10 @@ export default function Register() {
                                                         onChangeText={(val) => updateChildField(index, "age", val)}
                                                     />
 
-                                                    <RequiredLabel text="Vaccinated?"/>
+                                                    <RequiredLabel text="Vaccinated?" />
                                                     <View style={[
                                                         styles.pickerContainer,
-                                                        child.vaccinated === "Not Selected" && { borderColor: 'red'}
+                                                        child.vaccinated === "Not Selected" && { borderColor: 'red' }
                                                     ]}>
                                                         {Platform.OS === "web" ? (
                                                             /* --- 💻 LAPTOP / WEB VIEW --- */
@@ -1144,7 +1144,7 @@ export default function Register() {
                                                                 selectedValue={child.vaccinated}
                                                                 onValueChange={(val) => updateChildField(index, "vaccinated", val)}
                                                             >
-                                                                <Picker.Item label="-Select-" value="Not Selected" color="#999"/>
+                                                                <Picker.Item label="-Select-" value="Not Selected" color="#999" />
                                                                 <Picker.Item label="Yes" value="Yes" color="#000" />
                                                                 <Picker.Item label="No" value="No" color="#000" />
                                                             </Picker>
@@ -1233,7 +1233,7 @@ export default function Register() {
                         </>
                     )}
                     <Text style={styles.sectionTitle}>4. Security</Text>
-                    <RequiredLabel text="Enter Your Password"/>
+                    <RequiredLabel text="Enter Your Password" />
                     <View style={styles.passwordContainer}>
                         <TextInput
                             placeholder="Password"
@@ -1260,7 +1260,7 @@ export default function Register() {
                         </View>
                     )}
 
-                    <RequiredLabel text="Confirm Password"/>
+                    <RequiredLabel text="Confirm Password" />
                     <TextInput
                         placeholder="Repeat Password"
                         secureTextEntry={true}
@@ -1325,7 +1325,7 @@ const styles = StyleSheet.create({
         marginLeft: 3,
         fontWeight: "bold",
     },
-// Keep your existing label style but remove marginBottom if it's too large
+    // Keep your existing label style but remove marginBottom if it's too large
     label: {
         fontSize: 14,
         fontWeight: "500",

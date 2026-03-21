@@ -59,14 +59,23 @@ export default function EmergencyAlert() {
             }
 
             // 4. Save to Firestore
-            await addDoc(collection(db, "emergency"), {
-                workerId: workerMobile,
-                latitude: location.coords.latitude,
-                longitude: location.coords.longitude,
-                timestamp: serverTimestamp(),
-                status: "UNRESOLVED",
-                type: "Medical Emergency"
-            });
+            await Promise.all([
+                addDoc(collection(db, "emergency"), {
+                    workerId: workerMobile,
+                    latitude: location.coords.latitude,
+                    longitude: location.coords.longitude,
+                    timestamp: serverTimestamp(),
+                    status: "UNRESOLVED",
+                    type: "Medical Emergency"
+                }),
+                addDoc(collection(db, "audit_logs"), {
+                    userName: workerMobile,
+                    userRole: "App Worker",
+                    actionText: "triggered a Critical Medical Emergency SOS alert.",
+                    type: "ALERT",
+                    timestamp: serverTimestamp()
+                })
+            ]);
 
             // 5. Success Message (Now using showAlert for laptop compatibility)
             showAlert("SOS SENT", "Supervisor and nearby centers have been alerted.", () => router.back());

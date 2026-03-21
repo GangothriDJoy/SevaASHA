@@ -9,12 +9,12 @@ export default function MotherDashboard() {
     const router = useRouter();
     const params = useLocalSearchParams();
     const { name } = useLocalSearchParams();
-    
+
     const userName = String(name || "Meera").trim();
 
     // Mock Dashboard Stats for Mother
     const motherStats = {
-        weeksPregnant: 24, 
+        weeksPregnant: 24,
         nextCheckup: "March 15, 2026",
         trimester: "2nd Trimester",
         babySize: "Size of an Ear of Corn 🌽",
@@ -39,7 +39,7 @@ export default function MotherDashboard() {
                             <Ionicons name="log-out-outline" size={28} color="#FFCDD2" />
                         </TouchableOpacity>
                     </View>
-                    
+
                     {/* Beautiful Pregnancy Progress Card */}
                     <View style={styles.progressCard}>
                         <View style={styles.progressLeft}>
@@ -59,7 +59,7 @@ export default function MotherDashboard() {
                 </View>
 
                 <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                    
+
                     {/* --- 2. UPCOMING APPOINTMENT --- */}
                     <Text style={styles.sectionTitle}>Up Next</Text>
                     <TouchableOpacity style={styles.appointmentBox} activeOpacity={0.8}>
@@ -99,7 +99,7 @@ export default function MotherDashboard() {
                         <Text style={styles.sectionTitle}>My Health Tools</Text>
                         <Ionicons name="heart" size={20} color="#D81B60" />
                     </View>
-                    
+
                     <View style={styles.grid}>
                         <TouchableOpacity style={styles.gridBtn} activeOpacity={0.7}>
                             <View style={[styles.btnIcon, { backgroundColor: '#FCE4EC' }]}>
@@ -164,14 +164,14 @@ const glowingShadow = Platform.select({
 const styles = StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: "#D81B60" },
     container: { flex: 1, backgroundColor: "#FAFAFA" }, // Very soft clean white
-    
+
     // --- Header Styles ---
-    header: { 
-        backgroundColor: "#D81B60", 
-        paddingHorizontal: 20, 
-        paddingTop: Platform.OS === 'android' ? 20 : 10, 
+    header: {
+        backgroundColor: "#D81B60",
+        paddingHorizontal: 20,
+        paddingTop: Platform.OS === 'android' ? 20 : 10,
         paddingBottom: 65,
-        borderBottomLeftRadius: 35, 
+        borderBottomLeftRadius: 35,
         borderBottomRightRadius: 35,
         zIndex: 10
     },
@@ -181,7 +181,7 @@ const styles = StyleSheet.create({
     subHeaderText: { color: "#F8BBD0", fontSize: 13, marginBottom: 2, fontWeight: "600", letterSpacing: 0.5, textTransform: 'uppercase' },
     headerTitle: { color: "white", fontSize: 24, fontWeight: "900", letterSpacing: 0.5 },
     profileBtn: { padding: 4, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20 },
-    
+
     // --- Floating Progress Card ---
     progressCard: {
         flexDirection: 'row',
@@ -203,16 +203,16 @@ const styles = StyleSheet.create({
     trimesterText: { fontSize: 22, fontWeight: '900', color: '#D81B60', marginBottom: 10 },
     babySizeTag: { backgroundColor: '#FFF0F5', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, alignSelf: 'flex-start' },
     babySizeText: { fontSize: 12, color: '#C2185B', fontWeight: '700' },
-    
+
     weekCircleWrap: { padding: 5, borderRadius: 50, backgroundColor: '#FCE4EC' },
-    weekCircle: { 
-        width: 86, 
-        height: 86, 
-        borderRadius: 43, 
-        backgroundColor: '#D81B60', 
-        justifyContent: 'center', 
+    weekCircle: {
+        width: 86,
+        height: 86,
+        borderRadius: 43,
+        backgroundColor: '#D81B60',
+        justifyContent: 'center',
         alignItems: 'center',
-        ...glowingShadow 
+        ...glowingShadow
     },
     weekNumber: { fontSize: 32, fontWeight: '900', color: '#FFFFFF', lineHeight: 36 },
     weekLabel: { fontSize: 13, color: '#FFCDD2', fontWeight: '700', marginTop: -2 },
@@ -244,11 +244,11 @@ const styles = StyleSheet.create({
 
     // --- Vitals Row ---
     vitalsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 25 },
-    vitalMiniCard: { 
-        backgroundColor: '#FFFFFF', 
-        width: '31%', 
-        paddingVertical: 15, 
-        borderRadius: 20, 
+    vitalMiniCard: {
+        backgroundColor: '#FFFFFF',
+        width: '31%',
+        paddingVertical: 15,
+        borderRadius: 20,
         alignItems: 'center',
         ...shadowConfig,
         borderWidth: 1,
@@ -259,13 +259,13 @@ const styles = StyleSheet.create({
 
     // --- Grid System ---
     grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 10 },
-    gridBtn: { 
-        backgroundColor: '#FFFFFF', 
-        width: '47.5%', 
-        paddingVertical: 20, 
+    gridBtn: {
+        backgroundColor: '#FFFFFF',
+        width: '47.5%',
+        paddingVertical: 20,
         paddingHorizontal: 15,
-        borderRadius: 24, 
-        marginBottom: 15, 
+        borderRadius: 24,
+        marginBottom: 15,
         ...shadowConfig,
         borderWidth: 1,
         borderColor: '#F9F9F9'

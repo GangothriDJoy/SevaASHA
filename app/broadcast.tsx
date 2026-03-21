@@ -1,38 +1,106 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, FlatList } from 'react-native';
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, limit } from 'firebase/firestore';
 import { db } from '@/firebaseConfig';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
 export default function Broadcast() {
+    const router = useRouter();
     const [msg, setMsg] = useState('');
+    const [target, setTarget] = useState('All');
+    const [isSent, setIsSent] = useState(false);
+    const [history, setHistory] = useState<any[]>([]);
+
+    useEffect(() => {
+        const q = query(collection(db, "broadcasts"), orderBy("createdAt", "desc"), limit(20));
+        const unsub = onSnapshot(q, (snap) => {
+            const list: any[] = [];
+            snap.forEach(doc => {
+                list.push({ id: doc.id, ...doc.data() });
+            });
+            setHistory(list);
+        });
+        return unsub;
+    }, []);
 
     const sendBroadcast = async () => {
-        if (!msg) return;
+        if (!msg.trim()) return;
         try {
-            await addDoc(collection(db, "notifications"), {
-                message: msg,
-                type: "BROADCAST",
+            await addDoc(collection(db, "broadcasts"), {
+                message: msg.trim(),
+                target: target,
                 createdAt: serverTimestamp(),
                 sender: "Admin"
             });
-            Alert.alert("Success", "Broadcast sent to all active workers.");
+            setIsSent(true);
             setMsg('');
+            setTimeout(() => setIsSent(false), 3000);
         } catch (e) { Alert.alert("Error", "Failed to send."); }
     };
 
+    const roles = ["All", "ASHA Worker", "Anganwadi Worker", "JPHN"];
+
     return (
         <View style={styles.container}>
-            <View style={styles.header}><Text style={styles.headerTitle}>Central Broadcast</Text></View>
+            <View style={styles.header}>
+                <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 15 }}>
+                    <Ionicons name="arrow-back" size={24} color="white" />
+                </TouchableOpacity>
+                <Text style={styles.headerTitle}>Central Broadcast</Text>
+            </View>
+
             <View style={styles.content}>
-                <Text style={styles.label}>Message to all ASHA Workers:</Text>
+                <Text style={styles.label}>Select Target Audience:</Text>
+                <View style={styles.roleContainer}>
+                    {roles.map(r => (
+                        <TouchableOpacity 
+                            key={r} 
+                            style={[styles.roleBtn, target === r && styles.roleBtnActive]}
+                            onPress={() => setTarget(r)}
+                        >
+                            <Text style={[styles.roleText, target === r && styles.roleTextActive]}>
+                                {r === 'All' ? 'All Workers' : r.replace(' Worker', '')}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
+
+                <Text style={styles.label}>Message Body:</Text>
                 <TextInput
                     multiline numberOfLines={5} style={styles.input}
-                    placeholder="Enter urgent announcement..."
+                    placeholder="Enter urgent announcement or policy update..."
                     value={msg} onChangeText={setMsg}
                 />
-                <TouchableOpacity style={styles.btn} onPress={sendBroadcast}>
-                    <Text style={styles.btnText}>Send Now</Text>
+
+                <TouchableOpacity 
+                    style={[styles.btn, isSent && styles.btnSent]} 
+                    onPress={sendBroadcast}
+                    disabled={isSent || !msg.trim()}
+                >
+                    <Ionicons name={isSent ? "checkmark-circle" : "send"} size={20} color="white" style={{ marginRight: 8 }} />
+                    <Text style={styles.btnText}>{isSent ? "Broadcast Sent" : "Send Alert"}</Text>
                 </TouchableOpacity>
+
+                <Text style={[styles.label, { marginTop: 30, marginBottom: 15 }]}>Recent Broadcasts History</Text>
+                <FlatList
+                    data={history}
+                    keyExtractor={item => item.id}
+                    showsVerticalScrollIndicator={false}
+                    renderItem={({ item }) => (
+                        <View style={styles.historyCard}>
+                            <View style={styles.historyHeader}>
+                                <View style={styles.targetBadge}>
+                                    <Text style={styles.targetBadgeText}>{item.target}</Text>
+                                </View>
+                                <Text style={styles.timeText}>
+                                    {item.createdAt ? item.createdAt.toDate().toLocaleDateString() : 'Just now'}
+                                </Text>
+                            </View>
+                            <Text style={styles.historyMsg}>{item.message}</Text>
+                        </View>
+                    )}
+                />
             </View>
         </View>
     );
@@ -40,11 +108,23 @@ export default function Broadcast() {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F4F7F7' },
-    header: { backgroundColor: '#D32F2F', padding: 20, paddingTop: 50 },
+    header: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#D32F2F', padding: 20, paddingTop: 50 },
     headerTitle: { color: 'white', fontSize: 20, fontWeight: 'bold' },
-    content: { padding: 20 },
-    label: { fontWeight: 'bold', marginBottom: 10, color: '#333' },
-    input: { backgroundColor: 'white', padding: 15, borderRadius: 10, textAlignVertical: 'top', elevation: 2 },
-    btn: { backgroundColor: '#D32F2F', padding: 18, borderRadius: 10, marginTop: 20, alignItems: 'center' },
-    btnText: { color: 'white', fontWeight: 'bold', fontSize: 16 }
+    content: { padding: 20, flex: 1 },
+    label: { fontWeight: 'bold', marginBottom: 10, color: '#333', fontSize: 16 },
+    roleContainer: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 20, gap: 10 },
+    roleBtn: { paddingVertical: 10, paddingHorizontal: 16, backgroundColor: '#E0E0E0', borderRadius: 20 },
+    roleBtnActive: { backgroundColor: '#D32F2F' },
+    roleText: { color: '#555', fontWeight: 'bold', fontSize: 13 },
+    roleTextActive: { color: 'white' },
+    input: { backgroundColor: 'white', padding: 15, borderRadius: 10, textAlignVertical: 'top', elevation: 2, fontSize: 15 },
+    btn: { flexDirection: 'row', backgroundColor: '#D32F2F', padding: 16, borderRadius: 10, marginTop: 20, alignItems: 'center', justifyContent: 'center', elevation: 3 },
+    btnSent: { backgroundColor: '#2E7D32' },
+    btnText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
+    historyCard: { backgroundColor: 'white', padding: 15, borderRadius: 12, marginBottom: 12, elevation: 1 },
+    historyHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+    targetBadge: { backgroundColor: '#FFF3E0', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+    targetBadgeText: { color: '#E65100', fontSize: 11, fontWeight: 'bold' },
+    timeText: { color: '#888', fontSize: 12 },
+    historyMsg: { color: '#444', fontSize: 14, lineHeight: 20 }
 });

@@ -39,13 +39,13 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
     },
     logo: {
-        backgroundColor: "white",
-        borderRadius: 60,
-        justifyContent: "center",
-        alignItems: "center",
-        marginBottom: 30,
-        width: '125%',         // Give it some "breathing room" inside the circle
-        height: '125%',
+        width: '100%',
+        height: '100%',
+        transform: [
+            { scale: 1.65 },
+            { translateY: 9 },
+            {translateX: -1}
+        ],
     },
     logoText: {
         color: "#1F7A6B",

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TextInput, Alert, Platform, TouchableOpacity, ScrollView } from "react-native";
+import { View, Text, StyleSheet, ActivityIndicator, TextInput, Alert, Platform, TouchableOpacity, ScrollView, Modal, FlatList } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { collection, collectionGroup, query, where, getDocs, onSnapshot } from 'firebase/firestore';
+import { collection, collectionGroup, query, where, getDocs, onSnapshot, doc, updateDoc, orderBy, limit } from 'firebase/firestore';
 import { db } from '@/firebaseConfig';
 
 interface UserProfile {
@@ -45,7 +45,7 @@ export default function AdminDashboard() {
     const router = useRouter();
     const params = useLocalSearchParams();
     const { role, name } = useLocalSearchParams();
-    
+
     const userRole = String(role || "Supervisor").trim();
     const userMobile = String(params.userMobile || "").trim();
     const userName = String(name || "Supervisor User").trim();
@@ -54,14 +54,24 @@ export default function AdminDashboard() {
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [adminStats, setAdminStats] = useState({
-        activeEmergencies: 0, 
-        totalPregnantWomen: 0, 
-        highRiskPregnancies: 0, 
-        immunizationDue: 0, 
-        activeWorkers: 0, 
-        assignedBlock: "Main Block", 
-        malnutritionCases: 0
+        activeEmergencies: 0,
+        totalPregnantWomen: 0,
+        highRiskPregnancies: 0,
+        benHighRisk: 0, 
+        householdHighRisk: 0,
+        immunizationDue: 0,
+        activeWorkers: 0,
+        assignedBlock: "Main Block",
+        malnutritionCases: 0,
+        hmChildren: 0,
+        benChildren: 0,
+        usersChildren: 0,
+        hmPregnancies: 0,
+        usersPregnancies: 0
     });
+
+    const [notifications, setNotifications] = useState<any[]>([]);
+    const [isNotifModalVisible, setIsNotifModalVisible] = useState(false);
 
     const navigateTo = (path: string, label: string) => {
         router.push({ pathname: path as any, params: { userMobile: userMobile, title: label } });
@@ -93,21 +103,109 @@ export default function AdminDashboard() {
 
     useEffect(() => {
         let internalCount = -1;
-        
+
         const qHighRisk = query(collectionGroup(db, "high_risk"), where("healthIssues", "==", "High Risk"));
         const unsubHighRisk = onSnapshot(qHighRisk, (snapshot) => {
             setAdminStats(prev => ({ ...prev, highRiskPregnancies: snapshot.size }));
         }, (error) => console.error("High Risk Check Error:", error.message));
+
+        const qBenHighRisk = query(collection(db, "beneficiaries"), where("role", "==", "Mother"));
+        const unsubBenHighRisk = onSnapshot(qBenHighRisk, (snapshot) => {
+            let count = 0;
+            snapshot.forEach((doc) => {
+                const healthStr = (doc.data().healthIssues || "").toLowerCase();
+                if(healthStr && healthStr !== "none" && healthStr !== "normal" && healthStr !== "-select-") {
+                     count++;
+                }
+            });
+            setAdminStats(prev => ({ ...prev, benHighRisk: count }));
+        }, (error) => console.error("Beneficiary High Risk Check Error:", error.message));
 
         const qMalnutrition = query(collectionGroup(db, "high_risk"), where("malnutritionStatus", "==", "Flagged"));
         const unsubMalnutrition = onSnapshot(qMalnutrition, (snapshot) => {
             setAdminStats(prev => ({ ...prev, malnutritionCases: snapshot.size }));
         }, (error) => console.error("Malnutrition Check Error:", error.message));
 
-        const qMissedVax = query(collection(db, "beneficiaries"), where("vaccinationStatus", "==", "Missed"));
+        const qHousehold = query(collection(db, "household_members"));
+        const unsubHousehold = onSnapshot(qHousehold, (snapshot) => {
+            let hrCount = 0;
+            let childrenCount = 0;
+            let pregCount = 0;
+            snapshot.forEach((doc) => {
+                const data = doc.data();
+                const bp = data.bloodPressure || "";
+                const sys = parseInt(bp.split("/")[0]) || 0;
+                const dia = parseInt(bp.split("/")[1]) || 0;
+                const hasHighBp = sys >= 140 || dia >= 90 || parseInt(bp) >= 140;
+                const sugar = parseInt(data.sugarLevel) || 0;
+                const hasHighSugar = sugar >= 140;
+                const conditions = data.chronicConditions || [];
+                
+                if (hasHighBp || hasHighSugar || conditions.length > 0) hrCount++;
+
+                const ageNum = parseInt(data.age);
+                if (!isNaN(ageNum) && ageNum <= 5) childrenCount++;
+                if (data.childrenDetails && Array.isArray(data.childrenDetails)) childrenCount += data.childrenDetails.length;
+                
+                const isPregnant = data.isPregnant === true || data.pregnancyStatus === "Pregnant" || data.category === "Pregnant";
+                if (isPregnant) pregCount++;
+            });
+            setAdminStats(prev => ({ ...prev, householdHighRisk: hrCount, hmChildren: childrenCount, hmPregnancies: pregCount }));
+        }, (error) => console.error("Household Check Error:", error.message));
+
+        const qBenChildren = query(collection(db, "beneficiaries"));
+        const unsubBenChildren = onSnapshot(qBenChildren, (snapshot) => {
+            let c = 0;
+            let p = 0;
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                if (data.isChild === true || data.category === "Child" || data.role === "Child") c++;
+                if (data.childrenDetails && Array.isArray(data.childrenDetails)) c += data.childrenDetails.length;
+                
+                const isPregnant = data.isPregnant === true || data.pregnancyStatus === "Pregnant" || data.category === "Pregnant";
+                if (isPregnant) p++;
+            });
+            setAdminStats(prev => ({ ...prev, benChildren: c, totalPregnantWomen: p }));
+        });
+
+        const qUsersMother = query(collection(db, "users"), where("role", "==", "Mother"));
+        const unsubUsersMother = onSnapshot(qUsersMother, (snapshot) => {
+            let c = 0;
+            let pUsers = 0; 
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                if (data.childrenDetails && Array.isArray(data.childrenDetails)) c += data.childrenDetails.length;
+                const isPregnant = data.isPregnant === true || data.pregnancyStatus === "Pregnant" || data.category === "Pregnant";
+                if (isPregnant) pUsers++;
+            });
+            setAdminStats(prev => ({ ...prev, usersChildren: c, usersPregnancies: pUsers })); 
+        });
+
+        const todayISO = new Date().toISOString();
+        const qMissedVax = query(collection(db, "vaccine_cards"), where("status", "==", "Pending"));
         const unsubMissedVax = onSnapshot(qMissedVax, (snapshot) => {
-            setAdminStats(prev => ({ ...prev, immunizationDue: snapshot.size }));
+            const children = new Set();
+            snapshot.forEach((doc) => {
+                const data = doc.data();
+                if (data.dueDate && data.dueDate < todayISO && data.childId) {
+                    children.add(data.childId);
+                }
+            });
+            setAdminStats(prev => ({ ...prev, immunizationDue: children.size }));
         }, (error) => console.error("Missed Vax Check Error:", error.message));
+
+        const validWorkerRoles = ["ASHA Worker", "Anganwadi Worker", "JPHN"];
+        const qWorkers = query(collection(db, "users"), where("role", "in", validWorkerRoles));
+        const unsubWorkers = onSnapshot(qWorkers, (snapshot) => {
+            let count = 0;
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                if (data.status === "Approved" || data.status === "Active") {
+                    count++;
+                }
+            });
+            setAdminStats(prev => ({ ...prev, activeWorkers: count }));
+        }, (error) => console.error("Worker Check Error:", error.message));
 
         const qEmergency = query(collection(db, "emergency"), where("status", "==", "UNRESOLVED"));
         const unsubEmergency = onSnapshot(qEmergency, (snapshot: any) => {
@@ -119,11 +217,29 @@ export default function AdminDashboard() {
             setAdminStats(prev => ({ ...prev, activeEmergencies: currentCount }));
         }, (error: any) => console.error("Emergency Check Error:", error.message));
 
+        const qNotifications = query(collection(db, "notifications"), orderBy("createdAt", "desc"), limit(40));
+        const unsubNotifications = onSnapshot(qNotifications, (snapshot) => {
+            const list: any[] = [];
+            snapshot.forEach(docSnap => {
+                const data = docSnap.data();
+                if (data.targetRole === userRole || data.targetRole === "All") {
+                    list.push({ id: docSnap.id, ...data });
+                }
+            });
+            setNotifications(list);
+        });
+
         return () => {
             unsubMissedVax();
             unsubHighRisk();
+            unsubBenHighRisk();
             unsubMalnutrition();
+            unsubHousehold();
+            unsubBenChildren();
+            unsubUsersMother();
+            unsubWorkers();
             unsubEmergency();
+            unsubNotifications();
         };
     }, []);
 
@@ -149,6 +265,32 @@ export default function AdminDashboard() {
         return (firstName.includes(queryStr) || lastName.includes(queryStr) || mobile.includes(queryStr));
     });
 
+    const totalChildrenMerged = adminStats.hmChildren + adminStats.benChildren + adminStats.usersChildren;
+    const totalMissedVax = adminStats.immunizationDue;
+    const totalImmunizationTargets = totalChildrenMerged + adminStats.totalPregnantWomen + adminStats.hmPregnancies + adminStats.usersPregnancies;
+
+    const unreadCount = notifications.filter(n => n.read === false).length;
+
+    const handleNotificationPress = async (notif: any) => {
+        if (!notif.read) {
+            try { await updateDoc(doc(db, "notifications", notif.id), { read: true }); }
+            catch (e) { console.error("Error marking read", e); }
+        }
+    };
+
+    const getRelativeTime = (timestamp: any) => {
+        if (!timestamp) return "Just now";
+        const now = new Date();
+        const past = timestamp.toDate();
+        const diffMs = now.getTime() - past.getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+        if (diffMins < 1) return "Just now";
+        if (diffMins < 60) return `${diffMins} mins ago`;
+        const diffHours = Math.floor(diffMins / 60);
+        if (diffHours < 24) return `${diffHours} hours ago`;
+        return `${Math.floor(diffHours / 24)} days ago`;
+    };
+
     return (
         <View style={{ flex: 1 }}>
             <View style={styles.welcomeBanner}>
@@ -162,24 +304,31 @@ export default function AdminDashboard() {
                         <Text style={styles.topBarDetail}>{adminStats.assignedBlock} • {new Date().toLocaleDateString()}</Text>
                     </View>
                     <View style={styles.topBarIcons}>
-                        <TouchableOpacity style={styles.iconBtn}><Ionicons name="notifications" size={20} color="#1F7A6B" /></TouchableOpacity>
-                        <TouchableOpacity style={styles.iconBtn}><Ionicons name="settings-outline" size={20} color="#1F7A6B" /></TouchableOpacity>
+                        <TouchableOpacity style={styles.iconBtn} onPress={() => setIsNotifModalVisible(true)}>
+                            <Ionicons name="notifications" size={20} color="#1F7A6B" />
+                            {unreadCount > 0 && (
+                                <View style={styles.badgeNotif}>
+                                    <Text style={styles.badgeNotifText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                                </View>
+                            )}
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.iconBtn} onPress={() => router.push({ pathname: '/settings', params: { role: userRole, name: userName } })}><Ionicons name="settings-outline" size={20} color="#1F7A6B" /></TouchableOpacity>
                         <TouchableOpacity style={styles.iconBtn} onPress={() => router.replace("/auth")}><Ionicons name="log-out-outline" size={20} color="#D32F2F" /></TouchableOpacity>
                     </View>
                 </View>
-                
+
                 <View style={styles.adminSection}>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.alertStrip}>
-                        <AlertTab label="Emergencies" count={adminStats.activeEmergencies} color={adminStats.activeEmergencies > 0 ? "#FF0000" : "#D32F2F"} icon="alert-circle" style={adminStats.activeEmergencies > 0 ? styles.pulseGlow : null} onPress={() => navigateTo("/emergency", "Active Emergencies")}/>
-                        <AlertTab label="High Risk" count={adminStats.highRiskPregnancies} color="#E67E22" icon="trending-up" onPress={() => navigateTo("/high-risk", "High Risk")}/>
-                        <AlertTab label="Malnutrition" count={adminStats.malnutritionCases || 0} color="#8E44AD" icon="fitness" onPress={() => navigateTo("/malnutrition", "Malnutrition Alerts")}/>
-                        <AlertTab label="Missed Vax" count={adminStats.immunizationDue} color="#2980B9" icon="medkit" onPress={() => navigateTo("/missed-vax","Missed Vaccinations")}/>
+                        <AlertTab label="Emergencies" count={adminStats.activeEmergencies} color={adminStats.activeEmergencies > 0 ? "#FF0000" : "#D32F2F"} icon="alert-circle" style={adminStats.activeEmergencies > 0 ? styles.pulseGlow : null} onPress={() => navigateTo("/emergency", "Active Emergencies")} />
+                        <AlertTab label="High Risk" count={adminStats.highRiskPregnancies + (adminStats.benHighRisk || 0) + (adminStats.householdHighRisk || 0)} color="#E67E22" icon="trending-up" onPress={() => navigateTo("/high-risk", "High Risk")} />
+                        <AlertTab label="Malnutrition" count={adminStats.malnutritionCases || 0} color="#8E44AD" icon="fitness" onPress={() => navigateTo("/malnutrition", "Malnutrition Alerts")} />
+                        <AlertTab label="Missed Vax" count={totalMissedVax} color="#2980B9" icon="medkit" onPress={() => navigateTo("/missed-vax", "Missed Vaccinations")} />
                     </ScrollView>
-                    
+
                     {adminStats.activeEmergencies > 0 && (
                         <TouchableOpacity style={styles.emergencyCard} onPress={() => navigateTo("/emergency", "Active Emergencies")}>
                             <View style={styles.emergencyHeader} >
-                                <Ionicons name="warning" size={24} color="white"/>
+                                <Ionicons name="warning" size={24} color="white" />
                                 <Text style={styles.emergencyTitle}>
                                     {adminStats.activeEmergencies} ACTIVE EMERGENCIES
                                 </Text>
@@ -187,30 +336,30 @@ export default function AdminDashboard() {
                             <Text style={styles.emergencySubText}>Tap to view locations and assign teams.</Text>
                         </TouchableOpacity>
                     )}
-                    
+
                     <View style={styles.sectionHeader}>
                         <Text style={styles.sectionTitle}>Pending Approvals</Text>
                         <TouchableOpacity onPress={fetchPendingUsers} style={styles.iconCircle}>
-                            <Ionicons name="reload" size={18} color="#1F7A6B"/>
+                            <Ionicons name="reload" size={18} color="#1F7A6B" />
                         </TouchableOpacity>
                     </View>
-                    
+
                     <View style={styles.searchContainer}>
-                        <Ionicons name="search" size={20} color="#999" style={{marginLeft: 10}}/>
-                        <TextInput style={styles.integratedSearchBar} placeholder="Search by name or mobile..." value={searchQuery} onChangeText={setSearchQuery}/>
+                        <Ionicons name="search" size={20} color="#999" style={{ marginLeft: 10 }} />
+                        <TextInput style={styles.integratedSearchBar} placeholder="Search by name or mobile..." value={searchQuery} onChangeText={setSearchQuery} />
                     </View>
-                    
+
                     <View style={styles.approvalListContainer}>
                         {loading ? (
-                            <ActivityIndicator color="#1F7A6B" style={{margin: 20}}/>
+                            <ActivityIndicator color="#1F7A6B" style={{ margin: 20 }} />
                         ) : filteredUsers.length > 0 ? (
                             filteredUsers.slice(0, 5).map((item) => (
-                                <TouchableOpacity key={item.id} style={styles.compactCard} onPress={() => router.push({pathname: "/userDetail", params: {userId: item.id, collection: item.collection}})}>
+                                <TouchableOpacity key={item.id} style={styles.compactCard} onPress={() => router.push({ pathname: "/userDetail", params: { userId: item.id, collection: item.collection } })}>
                                     <View style={styles.cardInfo}>
                                         <Text style={styles.userName}>{item.firstName || "New"} {item.lastName || "User"}</Text>
                                         <Text style={styles.userSub}>{item.role} • {item.userMobile}</Text>
                                     </View>
-                                    <Ionicons name="chevron-forward" size={18} color="#1F7A6B"/>
+                                    <Ionicons name="chevron-forward" size={18} color="#1F7A6B" />
                                 </TouchableOpacity>
                             ))
                         ) : (
@@ -219,15 +368,15 @@ export default function AdminDashboard() {
                             </View>
                         )}
                     </View>
-                    
-                    <Text style={[styles.sectionTitle, {marginTop: 20}]}>Health Monitoring</Text>
+
+                    <Text style={[styles.sectionTitle, { marginTop: 20 }]}>Health Monitoring</Text>
                     <View style={styles.statsGrid}>
-                        <StatBox number={adminStats.totalPregnantWomen} label="Total Pregnancies" color="#1F7A6B" onPress={() => navigateTo("/maternal-registry", "Maternal Records")} />
-                        <StatBox number={adminStats.highRiskPregnancies} label="High Risk" color="#E74C3C" onPress={() => navigateTo("/high-risk", "High Risk Tracking")} />
-                        <StatBox number={adminStats.immunizationDue} label="Immunizations" color="#3498DB" onPress={() => navigateTo("/vaccination", "Vaccination Tracking")} />
+                        <StatBox number={adminStats.totalPregnantWomen + adminStats.hmPregnancies + adminStats.usersPregnancies} label="Total Pregnancies" color="#1F7A6B" onPress={() => navigateTo("/maternal-registry", "Total Pregnancies")} />
+                        <StatBox number={adminStats.highRiskPregnancies + (adminStats.benHighRisk || 0) + (adminStats.householdHighRisk || 0)} label="High Risk" color="#E74C3C" onPress={() => navigateTo("/high-risk", "High Risk Tracking")} />
+                        <StatBox number={totalImmunizationTargets} label="Immunizations" color="#3498DB" onPress={() => navigateTo("/vaccination", "Vaccination Tracking")} />
                         <StatBox number={adminStats.activeWorkers} label="Active Workers" color="#2ECC71" onPress={() => navigateTo("/worker-management", "Worker Status")} />
                     </View>
-                    
+
                     <Text style={styles.sectionTitle}>Control Center Modules</Text>
                     <View style={styles.actionGrid}>
                         <ModuleBtn label="Workers" icon="people" color="#1F7A6B" onPress={() => navigateTo("/worker-management", "ASHA Workers")} />
@@ -242,6 +391,57 @@ export default function AdminDashboard() {
                     </View>
                 </View>
             </ScrollView>
+
+            <Modal visible={isNotifModalVisible} transparent={true} animationType="slide" onRequestClose={() => setIsNotifModalVisible(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Notifications</Text>
+                            <TouchableOpacity onPress={() => setIsNotifModalVisible(false)} style={{ padding: 5 }}>
+                                <Ionicons name="close" size={24} color="#333" />
+                            </TouchableOpacity>
+                        </View>
+                        <FlatList
+                            data={notifications}
+                            keyExtractor={(item) => item.id}
+                            showsVerticalScrollIndicator={false}
+                            renderItem={({ item }) => {
+                                let iconName = "notifications";
+                                let iconColor = "#1F7A6B";
+                                if (item.type === "alert") { iconName = "warning"; iconColor = "#D32F2F"; }
+                                else if (item.type === "success") { iconName = "checkmark-circle"; iconColor = "#2E7D32"; }
+                                else if (item.type === "info") { iconName = "information-circle"; iconColor = "#0288D1"; }
+
+                                return (
+                                    <TouchableOpacity 
+                                        style={[styles.notifCard, item.read ? styles.notifRead : styles.notifUnread]}
+                                        onPress={() => handleNotificationPress(item)}
+                                        activeOpacity={0.7}
+                                    >
+                                        <View style={[styles.notifIconWrap, { backgroundColor: iconColor + '20' }]}>
+                                            <Ionicons name={iconName as any} size={22} color={iconColor} />
+                                        </View>
+                                        <View style={styles.notifTextWrap}>
+                                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                                <Text style={styles.notifItemTitle} numberOfLines={1}>{item.title || "Alert"}</Text>
+                                                <Text style={styles.notifTime}>{getRelativeTime(item.createdAt)}</Text>
+                                            </View>
+                                            <Text style={styles.notifItemMsg} numberOfLines={2}>{item.message}</Text>
+                                        </View>
+                                        {!item.read && <View style={styles.unreadDot} />}
+                                    </TouchableOpacity>
+                                );
+                            }}
+                            ListEmptyComponent={
+                                <View style={styles.emptyNotif}>
+                                    <Ionicons name="notifications-off-outline" size={40} color="#ccc" />
+                                    <Text style={styles.emptyNotifText}>No notifications right now.</Text>
+                                </View>
+                            }
+                        />
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -284,5 +484,22 @@ const styles = StyleSheet.create({
     statLabel: { fontSize: 13, color: '#7F8C8D', fontWeight: '600', marginTop: 4, textAlign: 'center' },
     actionGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginTop: 10 },
     moduleBtn: { width: '31%', aspectRatio: 1, backgroundColor: 'white', borderRadius: 15, justifyContent: 'center', alignItems: 'center', marginBottom: 10, elevation: 2, borderWidth: 1, borderColor: '#f0f0f0' },
-    actionText: { color: "#333", fontWeight: '600' }
+    actionText: { color: "#333", fontWeight: '600' },
+    badgeNotif: { position: 'absolute', top: -3, right: -3, backgroundColor: '#D32F2F', borderRadius: 10, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#FFF' },
+    badgeNotifText: { color: 'white', fontSize: 10, fontWeight: 'bold' },
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+    modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 25, borderTopRightRadius: 25, height: '70%', padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 10 },
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: '#eee' },
+    modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#333' },
+    notifCard: { flexDirection: 'row', padding: 15, borderRadius: 12, marginBottom: 10, alignItems: 'center', borderWidth: 1, borderColor: '#eee' },
+    notifRead: { backgroundColor: '#FFFFFF' },
+    notifUnread: { backgroundColor: '#E8F2F0', borderColor: '#C8E6D9' },
+    notifIconWrap: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
+    notifTextWrap: { flex: 1 },
+    notifItemTitle: { fontSize: 16, fontWeight: 'bold', color: '#333', flex: 1, marginRight: 10 },
+    notifTime: { fontSize: 11, color: '#888', marginTop: 2 },
+    notifItemMsg: { fontSize: 13, color: '#555', marginTop: 4, lineHeight: 18 },
+    unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#D32F2F', marginLeft: 10 },
+    emptyNotif: { alignItems: 'center', justifyContent: 'center', padding: 40 },
+    emptyNotifText: { marginTop: 15, color: '#999', fontSize: 15 }
 });

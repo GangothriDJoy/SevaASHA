@@ -391,7 +391,7 @@ export default function AddNew() {
                         <View style={styles.checklist}>
                             {["Diabetes", "Hypertension", "Thyroid", "Heart Disease"].map(item => (
                                 <TouchableOpacity key={item} style={[styles.checkItem, formData.summary.chronicConditions.includes(item) && styles.activeCheck]} onPress={() => toggleChronicCondition(item)}>
-                                    <Text style={formData.summary.chronicConditions.includes(item) ? { color: 'white' } : { color: 'black'}}>{item}</Text>
+                                    <Text style={formData.summary.chronicConditions.includes(item) ? { color: 'white' } : { color: 'black' }}>{item}</Text>
                                 </TouchableOpacity>
                             ))}
                         </View>

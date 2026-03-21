@@ -21,16 +21,73 @@ export default function MissedVaccinations() {
     const fetchMissedVax = async () => {
         try {
             setLoading(true);
+            const todayISO = new Date().toISOString();
+            
+            // Bypassing compound missing index by parsing Due Date via JS
             const q = query(
-                collection(db, "beneficiaries"),
-                where("vaccinationStatus", "==", "Missed")
+                collection(db, "vaccine_cards"),
+                where("status", "==", "Pending")
             );
             const querySnapshot = await getDocs(q);
-            const items: any[] = [];
+            const groupedByChild: Record<string, any> = {};
+
             querySnapshot.forEach((doc) => {
-                items.push({ id: doc.id, ...doc.data() });
+                const data = doc.data();
+                if (data.dueDate && data.dueDate < todayISO) {
+                    const childId = data.childId;
+                    if (!groupedByChild[childId]) {
+                        groupedByChild[childId] = {
+                            childId: childId,
+                            name: data.childName || "Unknown Patient",
+                            parentMobile: data.parentMobile || "--",
+                            missedVaccines: [],
+                            isMother: false
+                        };
+                    }
+                    groupedByChild[childId].missedVaccines.push(data.vaccineName);
+                }
             });
-            setList(items);
+
+            // Re-bind genuine maternal string metadata against raw childId UUIDs natively pulled from the vaccine record
+            const ids = Object.keys(groupedByChild);
+            if (ids.length > 0) {
+                const p1 = getDocs(collection(db, "users")).then(snap => {
+                    snap.forEach(doc => {
+                        const id = doc.id;
+                        if (groupedByChild[id] && groupedByChild[id].name === "Unknown Patient") {
+                            groupedByChild[id].name = doc.data().firstName ? doc.data().firstName + " " + (doc.data().lastName || "") : "Unknown Mother";
+                            groupedByChild[id].parentMobile = doc.data().userMobile || doc.data().mobile || "--";
+                            groupedByChild[id].isMother = true;
+                        }
+                    });
+                });
+
+                const p2 = getDocs(collection(db, "beneficiaries")).then(snap => {
+                    snap.forEach(doc => {
+                        const id = doc.id;
+                        if (groupedByChild[id] && groupedByChild[id].name === "Unknown Patient") {
+                            groupedByChild[id].name = doc.data().fullName || doc.data().name || (doc.data().firstName ? doc.data().firstName + " " + (doc.data().lastName || "") : "Unknown Mother");
+                            groupedByChild[id].parentMobile = doc.data().mobile || doc.data().userMobile || "--";
+                            groupedByChild[id].isMother = true;
+                        }
+                    });
+                });
+
+                const p3 = getDocs(collection(db, "household_members")).then(snap => {
+                    snap.forEach(doc => {
+                        const id = doc.id;
+                        if (groupedByChild[id] && groupedByChild[id].name === "Unknown Patient") {
+                            groupedByChild[id].name = doc.data().name || "Unknown Household Member";
+                            groupedByChild[id].parentMobile = doc.data().mobile || "--";
+                            groupedByChild[id].isMother = true;
+                        }
+                    });
+                });
+
+                await Promise.all([p1, p2, p3]);
+            }
+
+            setList(Object.values(groupedByChild));
         } catch (error) {
             console.error(error);
             showAlert("Error", "Could not load vaccination records.");
@@ -42,23 +99,38 @@ export default function MissedVaccinations() {
     useEffect(() => { fetchMissedVax(); }, []);
 
     const renderItem = ({ item }: any) => (
-        <View style={styles.card}>
+        <TouchableOpacity 
+            style={styles.card}
+            onPress={() => {
+                if (item.isMother) {
+                    router.push({
+                        pathname: '/patient-details',
+                        params: { userId: item.childId }
+                    });
+                } else {
+                    router.push({
+                        pathname: '/vaccine-card',
+                        params: { childId: item.childId, childName: item.name }
+                    });
+                }
+            }}
+        >
             <View style={styles.row}>
                 <View style={styles.info}>
                     <Text style={styles.name}>{item.name}</Text>
-                    <Text style={styles.subText}>Parent: {item.parentName} • Age: {item.age}</Text>
+                    <Text style={styles.subText}>Contact: {item.parentMobile}</Text>
                     <View style={styles.vaxBadge}>
-                        <Text style={styles.vaxText}>Pending: {item.pendingVaccine || "General Course"}</Text>
+                        <Text style={styles.vaxText}>Overdue: {item.missedVaccines.join(', ')}</Text>
                     </View>
                 </View>
                 <TouchableOpacity
                     style={styles.callBtn}
-                    onPress={() => showAlert("Calling", `Dialing ${item.mobile}...`)}
+                    onPress={() => showAlert("Calling", `Dialing ${item.parentMobile}...`)}
                 >
                     <Ionicons name="call" size={20} color="white" />
                 </TouchableOpacity>
             </View>
-        </View>
+        </TouchableOpacity>
     );
 
     return (
@@ -66,10 +138,23 @@ export default function MissedVaccinations() {
             <View style={[styles.content, isLaptop && styles.laptopContent]}>
                 <View style={styles.header}>
                     <TouchableOpacity onPress={() => router.back()}>
-                        <Ionicons name="arrow-back" size={28} color="#2980B9" />
+                        <Ionicons name="arrow-back" size={28} color="#D32F2F" />
                     </TouchableOpacity>
                     <Text style={styles.title}>Missed Vaccinations</Text>
                 </View>
+
+                {/* Village Red Flag Banner */}
+                {list.length > 0 && (
+                    <View style={styles.alertBanner}>
+                        <Ionicons name="warning" size={28} color="#D32F2F" style={{ marginRight: 15 }} />
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.bannerTitle}>Village Health Red Flag</Text>
+                            <Text style={styles.bannerText}>
+                                {list.length} individuals have officially missed due dates based on the National Immunization Schedule. Investigate stock or mobilization needs.
+                            </Text>
+                        </View>
+                    </View>
+                )}
 
                 {loading ? (
                     <ActivityIndicator size="large" color="#2980B9" style={{ marginTop: 50 }} />
@@ -91,14 +176,17 @@ const styles = StyleSheet.create({
     content: { flex: 1, width: '100%', padding: 15 },
     laptopContent: { maxWidth: 800 },
     header: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, paddingTop: Platform.OS === 'ios' ? 40 : 10 },
-    title: { fontSize: 22, fontWeight: 'bold', marginLeft: 15, color: '#2980B9' },
-    card: { backgroundColor: 'white',  padding: 15, marginBottom: 10, elevation: 2 },
+    title: { fontSize: 22, fontWeight: 'bold', marginLeft: 15, color: '#D32F2F' },
+    alertBanner: { backgroundColor: '#FFEBEE', borderWidth: 1, borderColor: '#FFCDD2', padding: 15, borderRadius: 12, flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+    bannerTitle: { color: '#D32F2F', fontWeight: 'bold', fontSize: 16, marginBottom: 4 },
+    bannerText: { color: '#B71C1C', fontSize: 13, lineHeight: 18 },
+    card: { backgroundColor: 'white', padding: 15, marginBottom: 10, elevation: 2, borderRadius: 10, borderLeftWidth: 4, borderLeftColor: '#D32F2F' },
     row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    info: { flex: 1 },
+    info: { flex: 1, marginRight: 15 },
     name: { fontSize: 17, fontWeight: 'bold', color: '#333' },
     subText: { fontSize: 13, color: '#666', marginTop: 3 },
-    vaxBadge: { backgroundColor: '#E1F5FE', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, alignSelf: 'flex-start', marginTop: 8 },
-    vaxText: { color: '#0288D1', fontSize: 11, fontWeight: 'bold' },
+    vaxBadge: { backgroundColor: '#FFEBEE', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, alignSelf: 'flex-start', marginTop: 10 },
+    vaxText: { color: '#D32F2F', fontSize: 12, fontWeight: 'bold' },
     callBtn: { backgroundColor: '#27ae60', padding: 12, borderRadius: 25 },
     empty: { textAlign: 'center', marginTop: 50, color: '#999', fontSize: 16 }
 });

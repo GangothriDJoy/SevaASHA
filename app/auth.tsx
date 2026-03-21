@@ -52,7 +52,7 @@ export default function Auth() {
     };
     const handleLogin = async () => {
         setHasAttempted(true);
-        if(!role || role ===""){return;}
+        if (!role || role === "") { return; }
         if (!mobile || !password) {
             const msg = "Please enter both mobile number and password.";
 
@@ -135,7 +135,7 @@ export default function Auth() {
                 Alert.alert(errorTitle, errorMessage);
             }
         }
-};
+    };
 
 
     return (
@@ -148,64 +148,64 @@ export default function Auth() {
             {/* Form */}
             <View style={styles.form}>
                 <Text style={styles.label}>Select Role</Text>
-                    {/* --- ROLE SELECTION --- */}
-                    {Platform.OS === "web" ? (
-                        /* --- 💻 LAPTOP / WEB DROPDOWN --- */
-                        // @ts-ignore
-                        <select
-                            value={role || ""}
-                            onChange={(e: any) => setRole(e.target.value)}
-                            style={{
-                                padding: 15,
-                                borderRadius: 10,
-                                borderWidth: 1,
-                                // Keeps your validation logic active on the web!
-                                borderColor: (hasAttempted && !isRoleSelected) ? "red" : "#ccc",
-                                backgroundColor: "white",
-                                fontSize: 16,
-                                fontFamily: "inherit",
-                                width: "100%",
-                                marginBottom: 15,
-                                boxSizing: "border-box",
-                                cursor: "pointer",
-                                outline: "none",
-                                color: (role === "-Select-" || role === "Not Selected") ? "#999" : "#000",
+                {/* --- ROLE SELECTION --- */}
+                {Platform.OS === "web" ? (
+                    /* --- 💻 LAPTOP / WEB DROPDOWN --- */
+                    // @ts-ignore
+                    <select
+                        value={role || ""}
+                        onChange={(e: any) => setRole(e.target.value)}
+                        style={{
+                            padding: 15,
+                            borderRadius: 10,
+                            borderWidth: 1,
+                            // Keeps your validation logic active on the web!
+                            borderColor: (hasAttempted && !isRoleSelected) ? "red" : "#ccc",
+                            backgroundColor: "white",
+                            fontSize: 16,
+                            fontFamily: "inherit",
+                            width: "100%",
+                            marginBottom: 15,
+                            boxSizing: "border-box",
+                            cursor: "pointer",
+                            outline: "none",
+                            color: (role === "-Select-" || role === "Not Selected") ? "#999" : "#000",
+                        }}
+                    >
+                        <option value="" hidden style={{ color: "#999" }}>-Select-</option>
+                        <option value="" disabled>-Select-</option>
+                        <option value="ASHA Worker">ASHA Worker</option>
+                        <option value="Anganwadi Worker">Anganwadi Worker</option>
+                        <option value="JPHN">JPHN</option>
+                        <option value="Supervisor">Supervisor</option>
+                        <option value="Mother">Mother / Beneficiary</option>
+                    </select>
+                ) : (
+                    /* --- 📱 MOBILE PICKER --- */
+                    <View style={[
+                        styles.pickerContainer,
+                        hasAttempted && !isRoleSelected && { borderColor: 'red', borderWidth: 1 }
+                    ]}>
+                        <Picker
+                            selectedValue={role}
+                            onValueChange={(val) => {
+                                if (val !== "")
+                                    setRole(val);
                             }}
                         >
-                            <option value="" hidden style={{ color: "#999" }}>-Select-</option>
-                            <option value="" disabled>-Select-</option>
-                            <option value="ASHA Worker">ASHA Worker</option>
-                            <option value="Anganwadi Worker">Anganwadi Worker</option>
-                            <option value="JPHN">JPHN</option>
-                            <option value="Supervisor">Supervisor</option>
-                            <option value="Mother">Mother / Beneficiary</option>
-                        </select>
-                    ) : (
-                        /* --- 📱 MOBILE PICKER --- */
-                        <View style={[
-                            styles.pickerContainer,
-                            hasAttempted && !isRoleSelected && { borderColor: 'red', borderWidth: 1 }
-                        ]}>
-                            <Picker
-                                selectedValue={role}
-                                onValueChange={(val) => {
-                                    if (val !== "")
-                                        setRole(val);
-                                }}
-                            >
-                                {role === "" && (
-                                    <Picker.Item label="-Select-" value="" color="#999" />
-                                )}
-                                <Picker.Item label="ASHA Worker" value="ASHA Worker" />
-                                <Picker.Item label="Anganwadi Worker" value="Anganwadi Worker" />
-                                <Picker.Item label="JPHN" value="JPHN" />
-                                <Picker.Item label="Supervisor" value="Supervisor" />
-                                <Picker.Item label="Mother / Beneficiary" value="Mother" />
-                            </Picker>
-                        </View>
-                    )}
+                            {role === "" && (
+                                <Picker.Item label="-Select-" value="" color="#999" />
+                            )}
+                            <Picker.Item label="ASHA Worker" value="ASHA Worker" />
+                            <Picker.Item label="Anganwadi Worker" value="Anganwadi Worker" />
+                            <Picker.Item label="JPHN" value="JPHN" />
+                            <Picker.Item label="Supervisor" value="Supervisor" />
+                            <Picker.Item label="Mother / Beneficiary" value="Mother" />
+                        </Picker>
+                    </View>
+                )}
 
-                    {/* Error Message */}
+                {/* Error Message */}
                 {hasAttempted && !isRoleSelected && (
                     <Text style={[styles.errorText, { marginTop: 5 }]}>
                         Please select a valid account type to continue.
@@ -381,12 +381,12 @@ const styles = StyleSheet.create({
         alignItems: "center",
         marginBottom: 5
     },
-        warningText: {
-            color: "#FF9800", // Orange/Amber color for a warning
-            fontSize: 12,
-            marginTop: -10,   // Pulls it closer to the input field
-            marginBottom: 10,
-            paddingLeft: 5,
-            fontWeight: "500",
-        }
+    warningText: {
+        color: "#FF9800", // Orange/Amber color for a warning
+        fontSize: 12,
+        marginTop: -10,   // Pulls it closer to the input field
+        marginBottom: 10,
+        paddingLeft: 5,
+        fontWeight: "500",
+    }
 });

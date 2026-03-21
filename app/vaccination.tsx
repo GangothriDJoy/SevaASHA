@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, TextInput, FlatList } from "react-native";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
@@ -16,41 +16,138 @@ export default function VaccinationTracking() {
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
 
-    useEffect(() => {
-        if (workerMobile) {
+    useFocusEffect(
+        useCallback(() => {
             fetchVaccinationTargets();
-        }
-    }, [workerMobile]);
+        }, [workerMobile])
+    );
 
     const fetchVaccinationTargets = async () => {
         setLoading(true);
         try {
-            const q = query(
-                collection(db, "household_members"),
-                where("workerId", "==", workerMobile)
-            );
-            const snapshot = await getDocs(q);
+            // First fetch real pending vaccines
+            const vcxQuery = query(collection(db, "vaccine_cards"), where("status", "==", "Pending"));
+            const vcxSnap = await getDocs(vcxQuery);
+            const vaxMap: Record<string, any[]> = {};
+            vcxSnap.forEach(doc => {
+                const data = doc.data();
+                if (!vaxMap[data.childId]) vaxMap[data.childId] = [];
+                vaxMap[data.childId].push(data);
+            });
+
+            const collectionRef = collection(db, "household_members");
+            const benRef = collection(db, "beneficiaries");
+            const usersRef = collection(db, "users");
+            
+            const qHm = workerMobile ? query(collectionRef, where("workerId", "==", workerMobile)) : query(collectionRef);
+            const qBen = workerMobile ? query(benRef, where("workerId", "==", workerMobile)) : query(benRef); 
+            const qUsers = query(usersRef, where("role", "==", "Mother"));
+                
+            const hmSnap = await getDocs(qHm);
+            const benSnap = await getDocs(qBen);
+            const usersSnap = await getDocs(qUsers);
 
             const children: any[] = [];
             const pregnant: any[] = [];
+            const today = new Date().toISOString();
 
-            snapshot.forEach((doc) => {
+            const processDoc = (doc: any) => {
                 const data = doc.data();
-                const ageNum = parseInt(data.age);
+                if (workerMobile && data.workerId !== workerMobile && data.ashaId !== workerMobile) return;
 
-                // Filter Children (Age 0-5)
-                if (!isNaN(ageNum) && ageNum <= 5) {
+                const ageNum = parseInt(data.age);
+                const isChild = data.isChild === true || data.category === "Child" || data.role === "Child" || (!isNaN(ageNum) && ageNum <= 5);
+                const isPregnant = data.isPregnant === true || data.pregnancyStatus === "Pregnant" || data.category === "Pregnant";
+
+                if (isChild) {
+                    const pendingVax = vaxMap[doc.id] || [];
+                    if (pendingVax.length > 0) {
+                        pendingVax.sort((a: any, b: any) => (a.dueDate < b.dueDate ? -1 : 1));
+                        const nextVax = pendingVax[0];
+                        data.nextVaccine = nextVax.vaccineName;
+                        data.vaccineStatus = nextVax.dueDate < today ? 'Overdue' : 'Due Soon';
+                    } else {
+                        data.nextVaccine = "All Caught Up";
+                        data.vaccineStatus = "Completed";
+                    }
                     children.push({ id: doc.id, ...data });
                 }
 
-                // Filter Pregnant Women
-                if (data.isPregnant === true) {
+                if (data.childrenDetails && Array.isArray(data.childrenDetails)) {
+                    data.childrenDetails.forEach((child: any, index: number) => {
+                        let dobStr = "Unknown Date";
+                        if (child.age && !isNaN(parseInt(child.age))) {
+                            const d = new Date();
+                            d.setFullYear(d.getFullYear() - parseInt(child.age));
+                            dobStr = d.toISOString().split('T')[0];
+                        }
+                        
+                        const childId = `${doc.id}_child_${index}`;
+                        const cData = {
+                            ...child,
+                            id: childId,
+                            name: child.name || "Child",
+                            dobString: dobStr,
+                            gender: child.gender || "N/A",
+                            nextVaccine: "All Caught Up",
+                            vaccineStatus: "Completed"
+                        };
+
+                        const pendingVax = vaxMap[childId] || [];
+                        if (pendingVax.length > 0) {
+                            pendingVax.sort((a: any, b: any) => (a.dueDate < b.dueDate ? -1 : 1));
+                            const nextVax = pendingVax[0];
+                            cData.nextVaccine = nextVax.vaccineName;
+                            cData.vaccineStatus = nextVax.dueDate < today ? 'Overdue' : 'Due Soon';
+                        }
+                        
+                        children.push(cData);
+                    });
+                }
+
+                if (isPregnant) {
+                    const pendingVax = vaxMap[doc.id] || [];
+                    if (pendingVax.length > 0) {
+                        pendingVax.sort((a: any, b: any) => (a.dueDate < b.dueDate ? -1 : 1));
+                        const nextVax = pendingVax[0];
+                        data.nextVaccine = nextVax.vaccineName;
+                        data.vaccineStatus = nextVax.dueDate < today ? 'Overdue' : 'Due Soon';
+                    } else {
+                        data.nextVaccine = "All Caught Up";
+                        data.vaccineStatus = "Completed";
+                    }
                     pregnant.push({ id: doc.id, ...data });
                 }
+            };
+
+            hmSnap.forEach(processDoc);
+            benSnap.forEach(processDoc);
+            usersSnap.forEach(processDoc);
+            
+            // For registered beneficiaries that might have been saved with `ashaId` instead of `workerId`
+            if (workerMobile) {
+                const qBenAsha = query(benRef, where("ashaId", "==", workerMobile));
+                const benAshaSnap = await getDocs(qBenAsha);
+                benAshaSnap.forEach((doc) => {
+                    // Prevent duplicates
+                    if (!children.find(c => c.id === doc.id) && !pregnant.find(p => p.id === doc.id)) {
+                        processDoc(doc);
+                    }
+                });
+            }
+
+            // Deduplicate safely
+            const uniqueChildren = Array.from(new Map(children.map(item => [item.id, item])).values());
+            const uniquePregnant = Array.from(new Map(pregnant.map(item => [item.id, item])).values());
+
+            // SORT children so Overdue appears strictly at the top!
+            uniqueChildren.sort((a: any, b: any) => {
+                const mapScore = (status: string) => status === 'Overdue' ? 2 : status === 'Due Soon' ? 1 : 0;
+                return mapScore(b.vaccineStatus) - mapScore(a.vaccineStatus);
             });
 
-            setChildrenList(children);
-            setPregnantList(pregnant);
+            setChildrenList(uniqueChildren);
+            setPregnantList(uniquePregnant);
         } catch (error) {
             console.error("Error fetching vaccination targets:", error);
         } finally {
@@ -70,25 +167,33 @@ export default function VaccinationTracking() {
     };
 
     const renderCard = ({ item }: { item: any }) => {
-        // Placeholder logic: In a full app, you'd calculate this based on DOB/LMP
         const isChild = activeTab === 'Children';
-        const mockStatus = Math.random() > 0.5 ? 'Overdue' : 'Due Soon';
-        const statusColor = mockStatus === 'Overdue' ? '#D32F2F' : '#F57C00';
+        const mockStatus = item.vaccineStatus || 'Completed';
+        const statusColor = mockStatus === 'Overdue' ? '#D32F2F' : (mockStatus === 'Due Soon' ? '#F57C00' : '#2E7D32');
 
         return (
             <TouchableOpacity
                 style={styles.card}
                 onPress={() => {
-                    // Navigate to a specific "Vaccine Logger" or the Member Profile
-                    router.push({
-                        pathname: "/member-profile",
-                        params: {
-                            memberId: item.id,
-                            name: item.name,
-                            houseId: item.houseId,
-                            view: 'vaccination' // Hint to the profile to open the vax tab
-                        }
-                    });
+                    if (isChild) {
+                        router.push({
+                            pathname: "/vaccine-card",
+                            params: {
+                                childId: item.id,
+                                childName: item.name,
+                                dob: item.dobString || item.dob || "--",
+                                readOnly: workerMobile ? 'false' : 'true'
+                            }
+                        });
+                    } else {
+                        router.push({
+                            pathname: "/patient-details",
+                            params: {
+                                userId: item.id,
+                                readOnly: workerMobile ? 'false' : 'true'
+                            }
+                        });
+                    }
                 }}
             >
                 <View style={styles.cardHeader}>
@@ -104,7 +209,7 @@ export default function VaccinationTracking() {
                 <View style={styles.vaccineDetails}>
                     <View>
                         <Text style={styles.vaccineLabel}>Next Vaccine:</Text>
-                        <Text style={styles.vaccineName}>{isChild ? "Pentavalent-1 & OPV-1" : "TT-2 (Tetanus)"}</Text>
+                        <Text style={styles.vaccineName}>{item.nextVaccine}</Text>
                     </View>
                     <View style={[styles.statusBadge, { backgroundColor: statusColor + '15', borderColor: statusColor }]}>
                         <Text style={[styles.statusText, { color: statusColor }]}>{mockStatus}</Text>
@@ -118,7 +223,16 @@ export default function VaccinationTracking() {
         <View style={styles.container}>
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()}>
+                <TouchableOpacity 
+                    onPress={() => {
+                        if (router.canGoBack()) {
+                            router.back();
+                        } else {
+                            router.replace('/');
+                        }
+                    }}
+                    style={{ paddingRight: 15, paddingVertical: 10 }}
+                >
                     <Ionicons name="arrow-back" size={24} color="white" />
                 </TouchableOpacity>
                 <Text style={styles.headerText}>Immunization Tracker</Text>

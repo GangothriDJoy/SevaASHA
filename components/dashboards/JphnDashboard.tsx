@@ -33,7 +33,7 @@ export default function JPHNControlCentre() {
                             <Ionicons name="shield-checkmark" size={28} color="#A7D7D7" />
                         </TouchableOpacity>
                     </View>
-                    
+
                     {/* Modern Summary Metric in Header */}
                     <View style={styles.headerMetricsCard}>
                         <View style={styles.metricBlock}>
@@ -192,12 +192,12 @@ const shadowConfig = Platform.select({
 const styles = StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: "#0E6C6C" },
     container: { flex: 1, backgroundColor: "#F7FAFA" },
-    header: { 
-        backgroundColor: "#0E6C6C", 
-        paddingHorizontal: 20, 
-        paddingTop: Platform.OS === 'android' ? 20 : 10, 
+    header: {
+        backgroundColor: "#0E6C6C",
+        paddingHorizontal: 20,
+        paddingTop: Platform.OS === 'android' ? 20 : 10,
         paddingBottom: 40,
-        borderBottomLeftRadius: 30, 
+        borderBottomLeftRadius: 30,
         borderBottomRightRadius: 30,
         zIndex: 10
     },
@@ -207,7 +207,7 @@ const styles = StyleSheet.create({
     headerTitle: { color: "white", fontSize: 20, fontWeight: "800", letterSpacing: 0.5 },
     subHeaderText: { color: "#A7D7D7", fontSize: 13, marginTop: 2, fontWeight: "500" },
     profileBtn: { padding: 5, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 12 },
-    
+
     headerMetricsCard: {
         flexDirection: 'row',
         backgroundColor: '#FFFFFF',
@@ -232,12 +232,12 @@ const styles = StyleSheet.create({
     sectionTitle: { fontSize: 18, fontWeight: "800", color: "#1A1A1A" },
     viewAll: { fontSize: 13, color: "#0E6C6C", fontWeight: "700" },
 
-    notifCard: { 
-        backgroundColor: '#FFFFFF', 
-        padding: 16, 
-        borderRadius: 20, 
-        flexDirection: 'row', 
-        marginBottom: 12, 
+    notifCard: {
+        backgroundColor: '#FFFFFF',
+        padding: 16,
+        borderRadius: 20,
+        flexDirection: 'row',
+        marginBottom: 12,
         ...shadowConfig,
         borderWidth: 1,
         borderColor: '#F0F0F0'
@@ -251,14 +251,14 @@ const styles = StyleSheet.create({
     notifMsg: { fontSize: 14, color: '#444', fontWeight: "500", lineHeight: 20 },
 
     grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: 5 },
-    gridBtn: { 
-        backgroundColor: '#FFFFFF', 
-        width: '31%', 
-        paddingVertical: 18, 
+    gridBtn: {
+        backgroundColor: '#FFFFFF',
+        width: '31%',
+        paddingVertical: 18,
         paddingHorizontal: 5,
-        borderRadius: 20, 
-        alignItems: 'center', 
-        marginBottom: 15, 
+        borderRadius: 20,
+        alignItems: 'center',
+        marginBottom: 15,
         ...shadowConfig,
         borderWidth: 1,
         borderColor: '#F0F0F0'
@@ -267,10 +267,10 @@ const styles = StyleSheet.create({
     btnLabel: { fontSize: 11, fontWeight: '700', textAlign: 'center', color: '#333' },
 
     indexSection: { marginTop: 10 },
-    indexCard: { 
-        backgroundColor: '#FFFFFF', 
-        padding: 20, 
-        borderRadius: 20, 
+    indexCard: {
+        backgroundColor: '#FFFFFF',
+        padding: 20,
+        borderRadius: 20,
         ...shadowConfig,
         borderWidth: 1,
         borderColor: '#F0F0F0'
@@ -287,18 +287,18 @@ const styles = StyleSheet.create({
     progressText: { fontSize: 12, color: '#777', fontWeight: '600' },
     progressPercentage: { fontSize: 12, fontWeight: '800', color: '#0E6C6C' },
 
-    footerContainer: { 
-        position: 'absolute', 
-        bottom: 0, 
-        width: '100%', 
-        backgroundColor: '#FFFFFF', 
-        flexDirection: 'row', 
-        paddingVertical: 12, 
+    footerContainer: {
+        position: 'absolute',
+        bottom: 0,
+        width: '100%',
+        backgroundColor: '#FFFFFF',
+        flexDirection: 'row',
+        paddingVertical: 12,
         paddingHorizontal: 20,
         ...shadowConfig,
         shadowOffset: { width: 0, height: -4 },
-        borderTopWidth: 1, 
-        borderTopColor: '#F0F0F0', 
+        borderTopWidth: 1,
+        borderTopColor: '#F0F0F0',
         justifyContent: 'space-between',
         paddingBottom: Platform.OS === 'ios' ? 25 : 12
     },

@@ -26,7 +26,7 @@ export default function UserDetail() {
         mobile: "",
         registrationDate: "",
         status: "Pending"
-    });const [loading, setLoading] = useState(true);
+    }); const [loading, setLoading] = useState(true);
     const safeUserId = String(userId || "");
     const safeCollection = String(collectionName || "users");
     //const safeId = userId ?? "";

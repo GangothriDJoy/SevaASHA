@@ -91,9 +91,6 @@ export default function MemberProfile() {
                     <Text style={styles.headerText}>{name}</Text>
                     <Text style={styles.subHeaderText}>Health History</Text>
                 </View>
-                <TouchableOpacity style={styles.addButton} onPress={() => router.push({ pathname: "/health-entry", params: { memberId, name } })}>
-                    <Ionicons name="add-circle" size={30} color="white" />
-                </TouchableOpacity>
             </View>
 
             {!loading && history.length > 0 && (
@@ -124,7 +121,7 @@ export default function MemberProfile() {
                         {/* Monthly Incentive Bar */}
                         <View style={styles.incentiveBar}>
                             <Ionicons name="stats-chart" size={14} color="#B2DFDB" />
-                            <Text style={styles.incentiveText}>Visits this month: <Text style={{fontWeight: 'bold'}}>{getMonthlyStats()}</Text> (Pending Claim)</Text>
+                            <Text style={styles.incentiveText}>Visits this month: <Text style={{ fontWeight: 'bold' }}>{getMonthlyStats()}</Text> (Pending Claim)</Text>
                         </View>
                     </View>
                 </View>

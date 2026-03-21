@@ -126,7 +126,7 @@ export default function SupervisorEmergencies() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#FEF2F2', alignItems: 'center' , marginTop: 15},
+    container: { flex: 1, backgroundColor: '#FEF2F2', alignItems: 'center', marginTop: 15 },
     content: { flex: 1, width: '100%', padding: 15 },
     laptopContent: { maxWidth: 1000 },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, paddingTop: 10 },
