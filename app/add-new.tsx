@@ -11,7 +11,12 @@ const CHRONIC_OPTIONS = ["Diabetes", "Hypertension", "Thyroid", "Heart Disease"]
 // Helper function to calculate pregnancy month from LMP date
 const calculatePregnancyMonth = (lmpDateString: string | null): number | null => {
     if (!lmpDateString) return null;
+
     const lmpDate = new Date(lmpDateString);
+
+    // FIX 1: Prevent "Invalid Date" crashes if an incomplete date is passed
+    if (isNaN(lmpDate.getTime())) return null;
+
     const today = new Date();
 
     const diffTime = Math.abs(today.getTime() - lmpDate.getTime());
@@ -37,7 +42,7 @@ export default function AddNew() {
     const [houseId, setHouseId] = useState("");
     const [existingResidents, setExistingResidents] = useState<any[]>([]);
 
-    const [showDatePickerMap, setShowDatePickerMap] = useState<{ [key: number]: boolean }>({});
+    const [showDatePickerMap, setShowDatePickerMap] = useState<{[key: number]: boolean}>({});
     const [attemptedSubmit, setAttemptedSubmit] = useState(false);
 
     const [formData, setFormData] = useState({
@@ -184,7 +189,7 @@ export default function AddNew() {
 
         for (let i = 0; i < formData.members.length; i++) {
             const m = formData.members[i];
-            const memberName = m.name.trim() || `Member ${i + 1}`;
+            const memberName = m.name.trim() || `Member ${i+1}`;
 
             const hasEmptyField = mandatoryFields.some(field => {
                 const value = m[field];
@@ -275,13 +280,7 @@ export default function AddNew() {
                     <View>
                         <Text style={styles.label}>Enter House ID</Text>
                         <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
-                            <TextInput 
-                                style={[styles.input, { flex: 1, marginBottom: 0, color: '#333' }]} 
-                                placeholder="e.g. 12/401" 
-                                placeholderTextColor="#888"
-                                value={houseId} 
-                                onChangeText={setHouseId} 
-                            />
+                            <TextInput style={[styles.input, { flex: 1, marginBottom: 0 }]} placeholder="e.g. 12/401" value={houseId} onChangeText={setHouseId} />
                             <TouchableOpacity style={styles.searchButton} onPress={fetchHouseData} disabled={loading}>
                                 {loading ? <ActivityIndicator color="white" /> : <Ionicons name="search" size={20} color="white" />}
                             </TouchableOpacity>
@@ -291,7 +290,7 @@ export default function AddNew() {
                                 <Text style={styles.sectionTitle}>Existing Members:</Text>
                                 {existingResidents.map((res, idx) => (
                                     <View key={idx} style={styles.residentItem}>
-                                        <Text style={{ fontSize: 16, color: '#444' }}>👤 {res.name} (Age: {res.age})</Text>
+                                        <Text style={{ fontSize: 16 }}>👤 {res.name} (Age: {res.age})</Text>
                                     </View>
                                 ))}
                             </View>
@@ -320,42 +319,37 @@ export default function AddNew() {
                                     </View>
 
                                     <TextInput
-                                        style={[styles.input, { color: '#333' }, hasError(member.name) && styles.inputError]}
+                                        style={[styles.input, hasError(member.name) && styles.inputError]}
                                         placeholder="Full Name *"
-                                        placeholderTextColor="#888"
                                         value={member.name}
                                         onChangeText={(val) => updateMember(index, 'name', val)}
                                     />
 
                                     <View style={{ flexDirection: 'row', gap: 10 }}>
                                         <TextInput
-                                            style={[styles.input, { flex: 1, color: '#333' }, hasError(member.age) && styles.inputError]}
+                                            style={[styles.input, { flex: 1 }, hasError(member.age) && styles.inputError]}
                                             placeholder="Age *"
-                                            placeholderTextColor="#888"
                                             keyboardType="numeric"
                                             value={member.age}
                                             onChangeText={(val) => updateMember(index, 'age', val)}
                                         />
                                         <TextInput
-                                            style={[styles.input, { flex: 1, color: '#333' }, hasError(member.gender) && styles.inputError]}
+                                            style={[styles.input, { flex: 1 }, hasError(member.gender) && styles.inputError]}
                                             placeholder="Gender (M/F) *"
-                                            placeholderTextColor="#888"
                                             value={member.gender}
                                             onChangeText={(val) => updateMember(index, 'gender', val)}
                                         />
                                     </View>
 
                                     <TextInput
-                                        style={[styles.input, { color: '#333' }, hasError(member.relation) && styles.inputError]}
+                                        style={[styles.input, hasError(member.relation) && styles.inputError]}
                                         placeholder="Relation to Head *"
-                                        placeholderTextColor="#888"
                                         value={member.relation}
                                         onChangeText={(val) => updateMember(index, 'relation', val)}
                                     />
                                     <TextInput
-                                        style={[styles.input, { color: '#333' }, (hasError(member.mobile) || (attemptedSubmit && member.mobile.length !== 10)) && styles.inputError]}
+                                        style={[styles.input, (hasError(member.mobile) || (attemptedSubmit && member.mobile.length !== 10)) && styles.inputError]}
                                         placeholder="Mobile *"
-                                        placeholderTextColor="#888"
                                         maxLength={10}
                                         keyboardType="phone-pad"
                                         value={member.mobile}
@@ -364,25 +358,22 @@ export default function AddNew() {
 
                                     <View style={{ flexDirection: 'row', gap: 10 }}>
                                         <TextInput
-                                            style={[styles.input, { flex: 1, color: '#333' }, hasError(member.weight) && styles.inputError]}
+                                            style={[styles.input, { flex: 1 }, hasError(member.weight) && styles.inputError]}
                                             placeholder="Weight (kg) *"
-                                            placeholderTextColor="#888"
                                             keyboardType="numeric"
                                             value={member.weight}
                                             onChangeText={(val) => updateMember(index, 'weight', val)}
                                         />
                                         <TextInput
-                                            style={[styles.input, { flex: 1, color: '#333' }, hasError(member.bloodPressure) && styles.inputError]}
+                                            style={[styles.input, { flex: 1 }, hasError(member.bloodPressure) && styles.inputError]}
                                             placeholder="BP (120/80) *"
-                                            placeholderTextColor="#888"
                                             value={member.bloodPressure}
                                             onChangeText={(val) => updateMember(index, 'bloodPressure', val)}
                                         />
                                     </View>
                                     <TextInput
-                                        style={[styles.input, { color: '#333' }, hasError(member.sugarLevel) && styles.inputError]}
+                                        style={[styles.input, hasError(member.sugarLevel) && styles.inputError]}
                                         placeholder="Sugar (mg/dL) *"
-                                        placeholderTextColor="#888"
                                         keyboardType="numeric"
                                         value={member.sugarLevel}
                                         onChangeText={(val) => updateMember(index, 'sugarLevel', val)}
@@ -433,12 +424,12 @@ export default function AddNew() {
 
                                     {member.isPregnant && (
                                         <View style={[styles.datePickerCardBlock, (attemptedSubmit && !member.lmpDate) && styles.inputError]}>
-                                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                <Text style={[styles.label, { color: '#8E24AA', marginBottom: 0 }]}>Month Calculation (based on LMP)</Text>
+                                            <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
+                                                <Text style={[styles.label, {color: '#8E24AA', marginBottom: 0}]}>Month Calculation (based on LMP)</Text>
 
                                                 {Platform.OS !== 'web' && (
                                                     <TouchableOpacity onPress={() => toggleDatePicker(index)} style={styles.dateEditBtn}>
-                                                        <Text style={{ color: 'white', fontSize: 12 }}>
+                                                        <Text style={{color: 'white', fontSize: 12}}>
                                                             {showDatePickerMap[index] && Platform.OS === 'ios' ? "Done" : (member.lmpDate ? "Change Date" : "Select Date")}
                                                         </Text>
                                                     </TouchableOpacity>
@@ -447,7 +438,7 @@ export default function AddNew() {
 
                                             {member.lmpDate && (
                                                 <View style={styles.calculationResultBox}>
-                                                    <Text style={styles.resultText}>LMP: <Text style={{ fontWeight: 'normal' }}>{new Date(member.lmpDate).toLocaleDateString()}</Text></Text>
+                                                    <Text style={styles.resultText}>LMP: <Text style={{fontWeight: 'normal'}}>{new Date(member.lmpDate).toLocaleDateString()}</Text></Text>
                                                     <View style={styles.monthPill}>
                                                         <Text style={styles.monthNumber}>{currentMonth || "?"}</Text>
                                                         <Text style={styles.monthLabel}>Month</Text>
@@ -459,15 +450,33 @@ export default function AddNew() {
                                                 <Text style={styles.warningText}>⚠️ Select Last Menstrual Period date to calculate month.</Text>
                                             )}
 
+                                            {/* FIX 2: Use native HTML input for Web to force Calendar UI */}
                                             {Platform.OS === 'web' ? (
-                                                <TextInput
-                                                    style={[styles.input, { marginTop: 15, marginBottom: 5, padding: 10, color: '#333' }]}
-                                                    {...({ type: 'date' } as any)}
-                                                    placeholderTextColor="#888"
+                                                <input
+                                                    type="date"
+                                                    style={{
+                                                        padding: '15px',
+                                                        borderRadius: '10px',
+                                                        border: '1px solid #ddd',
+                                                        width: '100%',
+                                                        marginTop: '15px',
+                                                        marginBottom: '5px',
+                                                        fontSize: '14px',
+                                                        boxSizing: 'border-box',
+                                                        fontFamily: 'inherit',
+                                                        color: '#333'
+                                                    }}
                                                     value={member.lmpDate ? member.lmpDate.split('T')[0] : ''}
-                                                    onChangeText={(text) => {
+                                                    onChange={(e) => {
+                                                        const text = e.target.value;
                                                         if (text) {
-                                                            updatePregnancyLMP(index, new Date(text));
+                                                            const parsedDate = new Date(text);
+                                                            if (!isNaN(parsedDate.getTime())) {
+                                                                updatePregnancyLMP(index, parsedDate);
+                                                            }
+                                                        } else {
+                                                            updateMember(index, 'lmpDate', null);
+                                                            updateMember(index, 'pregnancyMonth', null);
                                                         }
                                                     }}
                                                 />
@@ -508,7 +517,7 @@ export default function AddNew() {
                             );
                         })}
 
-                        <TouchableOpacity style={styles.addMoreBtn} onPress={() => setFormData({ members: [...formData.members, generateBlankMember()] })}>
+                        <TouchableOpacity style={styles.addMoreBtn} onPress={() => setFormData({ members: [...formData.members, generateBlankMember()]})}>
                             <Text style={styles.addMoreText}>+ ADD ANOTHER PERSON</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.submitButton} onPress={proceedToSummary}><Text style={styles.submitText}>NEXT: HEALTH SUMMARY</Text></TouchableOpacity>
@@ -527,7 +536,7 @@ export default function AddNew() {
                                     <View key={idx} style={styles.summaryItem}>
                                         <Text style={styles.summaryName}>• {m.name} (Age: {m.age})</Text>
                                         <Text style={styles.summaryHealthDetail}>
-                                            Current: <Text style={{ fontWeight: 'bold', color: '#E91E63' }}>Month {calculatePregnancyMonth(m.lmpDate)}</Text> (LMP: {new Date(m.lmpDate).toLocaleDateString()})
+                                            Current: <Text style={{fontWeight: 'bold', color: '#E91E63'}}>Month {calculatePregnancyMonth(m.lmpDate)}</Text> (LMP: {new Date(m.lmpDate).toLocaleDateString()})
                                         </Text>
                                     </View>
                                 ))}
