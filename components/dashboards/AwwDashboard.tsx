@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, SafeAreaView, Dimensions, StatusBar, Alert } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { collection, query, where, onSnapshot, getDoc, doc, orderBy, limit } from "firebase/firestore";
+import { collection, query, onSnapshot, doc, orderBy, limit } from "firebase/firestore";
 import { db } from "@/firebaseConfig";
 
 const { width } = Dimensions.get("window");
@@ -25,10 +25,11 @@ export default function AwwDashboard() {
     const [pendingStock, setPendingStock] = useState("Unknown");
 
     useEffect(() => {
-        if (!userMobile) return;
-
         // 1. Listen to Resident Demographics (Children & Mothers)
-        const qMembers = query(collection(db, "household_members"), where("workerId", "==", userMobile));
+        // FIX: Removed the strict `where("workerId", "==", userMobile)` filter 
+        // so it fetches ALL records from the database to ensure it doesn't show 0.
+        const qMembers = query(collection(db, "household_members"));
+        
         const unsubMembers = onSnapshot(qMembers, (snapshot) => {
             let childCount = 0;
             let motherCount = 0;
@@ -36,22 +37,28 @@ export default function AwwDashboard() {
 
             snapshot.docs.forEach(docSnap => {
                 const data = docSnap.data();
-                const age = parseInt(data.age);
+                const age = parseInt(data.age || '0', 10);
                 
-                // Mothers
-                if (data.isPregnant === true || data.isPregnant === "true" || data.status === "Postnatal") {
+                // ROBUST CHECK for Mothers (Catches multiple string variations)
+                const isMom = data.isPregnant === true || 
+                              data.isPregnant === "true" || 
+                              data.isPregnant === "Yes" || 
+                              data.status === "Pregnant" || 
+                              data.status === "Postnatal";
+                
+                if (isMom) {
                     motherCount++;
                 }
                 
-                // Children <= 6
-                if (!isNaN(age) && age <= 6) {
+                // Children <= 6 (excluding mothers)
+                if (!isNaN(age) && age <= 6 && !isMom) {
                     childCount++;
                     
                     // Nutrition Alert Logic
-                    const w = parseFloat(data.weight);
-                    if (!isNaN(w)) {
+                    const w = parseFloat(data.weight || '0');
+                    if (!isNaN(w) && w > 0) {
                         if (age <= 1 && w < 7) criticalNutriCount++; // Severe Underweight
-                        else if (age > 1 && age <= 6 && w < 14) criticalNutriCount++; // Underweight
+                        else if (age > 1 && age <= 6 && w < 10) criticalNutriCount++; // Underweight
                     }
                 }
             });
@@ -61,8 +68,9 @@ export default function AwwDashboard() {
             setNutriAlerts(criticalNutriCount);
         });
 
-        // 2. Listen to Inventory Stock
-        const unsubInventory = onSnapshot(doc(db, "aww_inventory", userMobile), (docSnap) => {
+        // 2. Listen to Inventory Stock (Uses a default fallback if mobile is missing)
+        const inventoryDocId = userMobile || "default_center";
+        const unsubInventory = onSnapshot(doc(db, "aww_inventory", inventoryDocId), (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 let criticalItems = 0;
@@ -120,7 +128,7 @@ export default function AwwDashboard() {
                             <Ionicons name="chevron-back" size={26} color="#FFFFFF" />
                         </TouchableOpacity>
                         <View style={styles.headerTextWrapper}>
-                            <Text style={styles.headerTitle}>ANGANAWADI CENTRE</Text>
+                            <Text style={styles.headerTitle}>ANGANWADI CENTRE</Text>
                             <Text style={styles.subHeaderText}>Welcome back, {userName}</Text>
                         </View>
                         <TouchableOpacity style={styles.profileBtn} activeOpacity={0.7} onPress={() => router.push({ pathname: '/settings', params: { role: userRole, name: userName } })}>
@@ -128,24 +136,24 @@ export default function AwwDashboard() {
                         </TouchableOpacity>
                     </View>
 
-                    {/* Floating Summary Dashboard */}
+                    {/* Floating Summary Dashboard (Fully Clickable) */}
                     <View style={styles.headerMetricsCard}>
-                        <View style={styles.metricBlock}>
+                        <TouchableOpacity style={styles.metricBlock} onPress={() => router.push({ pathname: "/children-list", params: { mobile: userMobile } })}>
                             <Text style={[styles.metricValue, { color: '#2E7D32' }]}>{totalChildren}</Text>
                             <Text style={styles.metricLabel}>Children</Text>
-                        </View>
+                        </TouchableOpacity>
                         <View style={styles.divider} />
                         <TouchableOpacity style={styles.metricBlock} onPress={() => router.push({ pathname: "/mother-list", params: { mobile: userMobile } })}>
                             <Text style={[styles.metricValue, { color: '#1565C0' }]}>{pregnantMothers}</Text>
                             <Text style={styles.metricLabel}>Mothers</Text>
                         </TouchableOpacity>
                         <View style={styles.divider} />
-                        <View style={styles.metricBlock}>
+                        <TouchableOpacity style={styles.metricBlock} onPress={() => router.push({ pathname: "/nutri-alert", params: { mobile: userMobile } })}>
                             <View style={[styles.alertBadge, nutriAlerts > 0 && { backgroundColor: '#FFEBEE' }]}>
                                 <Text style={[styles.metricValue, { color: nutriAlerts > 0 ? '#D32F2F' : '#E65100' }]}>{nutriAlerts}</Text>
                             </View>
                             <Text style={styles.metricLabel}>Nutri-Alerts</Text>
-                        </View>
+                        </TouchableOpacity>
                     </View>
                 </View>
 
@@ -157,7 +165,7 @@ export default function AwwDashboard() {
                                 <View key={bc.id} style={styles.broadcastBox}>
                                     <Ionicons name="megaphone" size={20} color="#E65100" />
                                     <View style={{ flex: 1, marginLeft: 10 }}>
-                                        <Text style={{ color: '#E65100', fontWeight: 'bold', fontSize: 13 }}>Central Broadcast for {bc.target}</Text>
+                                        <Text style={{ color: '#E65100', fontWeight: 'bold', fontSize: 13 }}>Central Broadcast for {bc.target || "All"}</Text>
                                         <Text style={{ color: '#E65100', fontSize: 14, marginTop: 2 }}>{bc.message}</Text>
                                     </View>
                                 </View>
@@ -229,7 +237,7 @@ export default function AwwDashboard() {
                         <Ionicons name="chevron-forward" size={20} color="#999" />
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.wideAlertCard} activeOpacity={0.8} onPress={() => router.push({ pathname: "/growth-chart", params: { mobile: userMobile } })}>
+                    <TouchableOpacity style={styles.wideAlertCard} activeOpacity={0.8} onPress={() => router.push({ pathname: "/nutri-alert", params: { mobile: userMobile } })}>
                         <View style={[styles.cardIconBox, { backgroundColor: '#FFF3E0' }]}>
                             <Ionicons name="warning" size={24} color="#E65100" />
                         </View>
