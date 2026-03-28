@@ -11,7 +11,7 @@ export default function AshaDashboard() {
     const { t } = useTranslation();
     const { role, name } = useLocalSearchParams();
     const params = useLocalSearchParams();
-    const userMobile = String(params.userMobile || "").trim();
+    const userMobile = String(params.mobile || params.userMobile || "").trim();
     const [userRole, setUserRole] = useState<string>("");
     const ashaStats = { ancDue: 3, immunizationDue: 5, targetVisits: 50, };
     const jphnStats = { activeAshaWorkers: 8, pendingHighRiskReferrals: 4, scheduledVaccinationCamps: 2, ancVisitsPending: 15, };
@@ -19,6 +19,7 @@ export default function AshaDashboard() {
     const [adminStats, setAdminStats] = useState({ activeEmergencies: 0, totalPregnantWomen: 0, highRiskPregnancies: 0, benHighRisk: 0, immunizationDue: 0, activeWorkers: 0, assignedBlock: "Today", malnutritionCases: 0, });
     const [visitCounts, setVisitCounts] = useState({ monthly: 0, today: 0 });
     const [supervisorAlerts, setSupervisorAlerts] = useState<any[]>([]);
+    const [approvedVisitsCount, setApprovedVisitsCount] = useState(0);
     const [globalBroadcasts, setGlobalBroadcasts] = useState<any[]>([]);
     const [notifications, setNotifications] = useState<any[]>([]);
     const [isNotifModalVisible, setIsNotifModalVisible] = useState(false);
@@ -29,45 +30,8 @@ export default function AshaDashboard() {
     }, [role]);
     useEffect(() => {
         if (!userRole) return;
-        if (userRole !== "Supervisor" && userRole !== "Admin") return;
-        let internalCount = -1;
-        console.log("Listeners starting for role:", userRole);
-        const qHighRisk = query(collectionGroup(db, "high_risk"), where("healthIssues", "==", "High Risk"));
-        const unsubHighRisk = onSnapshot(qHighRisk, (snapshot) => { console.log("High Risk Found:", snapshot.size); setAdminStats(prev => ({ ...prev, highRiskPregnancies: snapshot.size })); }, (error) => { console.error("🚨 HIGH RISK FIREBASE ERROR:", error.message); });
-        
-        const qBenHighRisk = query(collection(db, "beneficiaries"), where("role", "==", "Mother"));
-        const unsubBenHighRisk = onSnapshot(qBenHighRisk, (snapshot) => {
-            let count = 0;
-            snapshot.forEach((doc) => {
-                const healthStr = (doc.data().healthIssues || "").toLowerCase();
-                if(healthStr && healthStr !== "none" && healthStr !== "normal" && healthStr !== "-select-") {
-                     count++;
-                }
-            });
-            setAdminStats(prev => ({ ...prev, benHighRisk: count }));
-        }, (error) => console.error("Beneficiary High Risk Check Error:", error.message));
-        const qMalnutrition = query(collectionGroup(db, "high_risk"), where("malnutritionStatus", "==", "Flagged"));
-        const unsubMalnutrition = onSnapshot(qMalnutrition, (snapshot) => { console.log("Malnutrition Found:", snapshot.size); setAdminStats(prev => ({ ...prev, malnutritionCases: snapshot.size })); }, (error) => { console.error("🚨 MALNUTRITION FIREBASE ERROR:", error.message); });
-        const todayISO = new Date().toISOString();
-        const qMissedVax = query(collection(db, "vaccine_cards"), where("status", "==", "Pending"));
-        const unsubMissedVax = onSnapshot(qMissedVax, (snapshot) => {
-            const children = new Set();
-            snapshot.forEach((doc) => {
-                const data = doc.data();
-                if (data.dueDate && data.dueDate < todayISO && data.childId) {
-                    children.add(data.childId);
-                }
-            });
-            setAdminStats(prev => ({ ...prev, immunizationDue: children.size }));
-        }, (error) => console.error("Missed Vax Check Error:", error.message));
-        const q = query(collection(db, "emergency"), where("status", "==", "UNRESOLVED"));
-        const unsubscribe = onSnapshot(q, (snapshot: any) => {
-            const currentCount = snapshot.size;
-            if (internalCount !== -1 && currentCount > internalCount) { triggerEmergencyAlert(currentCount); }
-            internalCount = currentCount;
-            setAdminStats(prev => ({ ...prev, activeEmergencies: currentCount }));
-        }, (error: any) => { console.error("Emergency Listener Error:", error); });
-        
+
+        // Generic Listeners (For ALL roles including ASHA)
         const qBroadcasts = query(collection(db, "broadcasts"), orderBy("createdAt", "desc"), limit(10));
         const unsubBroadcasts = onSnapshot(qBroadcasts, (snapshot) => {
             const list: any[] = [];
@@ -80,7 +44,6 @@ export default function AshaDashboard() {
             setGlobalBroadcasts(list);
         });
 
-        // Using client-side filter to prevent Firestore composite index crashes
         const qNotifications = query(collection(db, "notifications"), orderBy("createdAt", "desc"), limit(40));
         const unsubNotifications = onSnapshot(qNotifications, (snapshot) => {
             const list: any[] = [];
@@ -93,6 +56,51 @@ export default function AshaDashboard() {
             setNotifications(list);
         });
 
+        // Supervisor / Admin Specific Listeners
+        if (userRole !== "Supervisor" && userRole !== "Admin") {
+            return () => { unsubBroadcasts(); unsubNotifications(); };
+        }
+
+        let internalCount = -1;
+        console.log("Admin/Supervisor Listeners starting for role:", userRole);
+        
+        const qHighRisk = query(collectionGroup(db, "high_risk"), where("healthIssues", "==", "High Risk"));
+        const unsubHighRisk = onSnapshot(qHighRisk, (snapshot) => { setAdminStats(prev => ({ ...prev, highRiskPregnancies: snapshot.size })); }, (error) => { console.error("🚨 HIGH RISK ERROR:", error.message); });
+        
+        const qBenHighRisk = query(collection(db, "beneficiaries"), where("role", "==", "Mother"));
+        const unsubBenHighRisk = onSnapshot(qBenHighRisk, (snapshot) => {
+            let count = 0;
+            snapshot.forEach((doc) => {
+                const healthStr = (doc.data().healthIssues || "").toLowerCase();
+                if(healthStr && healthStr !== "none" && healthStr !== "normal" && healthStr !== "-select-") {
+                     count++;
+                }
+            });
+            setAdminStats(prev => ({ ...prev, benHighRisk: count }));
+        });
+
+        const qMalnutrition = query(collectionGroup(db, "high_risk"), where("malnutritionStatus", "==", "Flagged"));
+        const unsubMalnutrition = onSnapshot(qMalnutrition, (snapshot) => { setAdminStats(prev => ({ ...prev, malnutritionCases: snapshot.size })); });
+        
+        const todayISO = new Date().toISOString();
+        const qMissedVax = query(collection(db, "vaccine_cards"), where("status", "==", "Pending"));
+        const unsubMissedVax = onSnapshot(qMissedVax, (snapshot) => {
+            const children = new Set();
+            snapshot.forEach((doc) => {
+                const data = doc.data();
+                if (data.dueDate && data.dueDate < todayISO && data.childId) { children.add(data.childId); }
+            });
+            setAdminStats(prev => ({ ...prev, immunizationDue: children.size }));
+        });
+
+        const q = query(collection(db, "emergency"), where("status", "==", "UNRESOLVED"));
+        const unsubscribe = onSnapshot(q, (snapshot: any) => {
+            const currentCount = snapshot.size;
+            if (internalCount !== -1 && currentCount > internalCount) { triggerEmergencyAlert(currentCount); }
+            internalCount = currentCount;
+            setAdminStats(prev => ({ ...prev, activeEmergencies: currentCount }));
+        });
+        
         return () => { unsubMissedVax(); unsubHighRisk(); unsubBenHighRisk(); unsubMalnutrition(); unsubscribe(); unsubBroadcasts(); unsubNotifications(); }
     }, [userRole]);
     const triggerEmergencyAlert = (count: number) => {
@@ -139,7 +147,20 @@ export default function AshaDashboard() {
                 snapshot.forEach(d => list.push({ id: d.id, ...d.data() }));
                 setSupervisorAlerts(list);
             });
-            return () => { unsubAlerts(); };
+            
+            const now = new Date();
+            const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            const incentivesQ = query(
+                collection(db, "incentive_claims"),
+                where("workerMobile", "==", userMobile),
+                where("month", "==", currentMonthStr),
+                where("status", "==", "Approved")
+            );
+            const unsubIncentives = onSnapshot(incentivesQ, (snapshot) => {
+                setApprovedVisitsCount(snapshot.size);
+            });
+            
+            return () => { unsubAlerts(); unsubIncentives(); };
         }
     }, [userMobile, userRole]);
     const getMonthlyProgress = () => { const target = ashaStats.targetVisits; const current = visitCounts.monthly; const percentage = Math.min(target === 0 ? 0 : (current / target) * 100, 100); return { monthlyTotal: current, target, percentage }; };
@@ -208,20 +229,33 @@ export default function AshaDashboard() {
                 {userRole === "ASHA Worker" && (
                     <View style={styles.ashaSection}>
                         {(() => {
-                            const { monthlyTotal, target, percentage } = getMonthlyProgress();
+                            const { monthlyTotal, target } = getMonthlyProgress();
+                            const verifyRatio = Math.min(monthlyTotal === 0 ? 0 : (approvedVisitsCount / monthlyTotal) * 100, 100);
                             return (
                                 <View style={styles.targetSection}>
                                     <View style={styles.targetHeader}>
-                                        <Text style={styles.targetTitle}>Monthly Incentive Goal</Text>
-                                        <Text style={styles.targetCount}>{monthlyTotal} / {target} Visits</Text>
+                                        <Text style={styles.targetTitle}>Approved Monthly Earnings</Text>
+                                        <Text style={[styles.targetCount, { color: '#2E7D32' }]}>₹{approvedVisitsCount * 200}</Text>
                                     </View>
+                                    
                                     <View style={styles.progressBarBackground}>
-                                        <View style={[styles.progressBarFill, { width: `${percentage}%` }]} />
+                                        <View style={[styles.progressBarFill, { width: `${verifyRatio}%`, backgroundColor: '#2E7D32' }]} />
                                     </View>
-                                    <Text style={styles.targetSubtext}>
-                                        {percentage >= 100
-                                            ? "🎉 Target Achieved! Max Incentive unlocked."
-                                            : `You need ${target - monthlyTotal} more visits to reach your goal.`}
+                                    
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, justifyContent: 'space-between' }}>
+                                         <Text style={[styles.targetSubtext, { color: '#1F7A6B', fontWeight: 'bold' }]}>
+                                              {approvedVisitsCount} / {monthlyTotal} Visits Verified
+                                         </Text>
+                                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                              <Ionicons name="shield-checkmark" size={14} color="#0288D1" style={{ marginRight: 4 }} />
+                                              <Text style={{ fontSize: 11, color: '#0288D1', fontWeight: 'bold' }}>JPHN Secured</Text>
+                                         </View>
+                                    </View>
+                                    
+                                    <Text style={[styles.targetSubtext, { marginTop: 6, fontStyle: 'italic' }]}>
+                                        {monthlyTotal - approvedVisitsCount > 0 
+                                            ? `${monthlyTotal - approvedVisitsCount} field visits are awaiting JPHN verification.`
+                                            : "All logged field visits for this month are successfully verified!"}
                                     </Text>
                                 </View>
                             );
@@ -388,10 +422,9 @@ export default function AshaDashboard() {
                             <Text style={styles.emergencySubText}>{t("emergency_desc")}</Text>
                         </TouchableOpacity>
 
-                        <Text style={styles.sectionTitle}>{t("recent_alerts")}</Text>
-
                         {supervisorAlerts.length > 0 && (
                             <View style={{ marginBottom: 15 }}>
+                                <Text style={styles.sectionTitle}>{t("recent_alerts")}</Text>
                                 {supervisorAlerts.map(alert => (
                                     <View key={alert.id} style={[styles.notifyBox, { backgroundColor: '#FFEBEE', marginBottom: 8, borderColor: '#D32F2F', borderWidth: 1 }]}>
                                         <Ionicons name="warning" size={20} color="#D32F2F" />
@@ -401,10 +434,17 @@ export default function AshaDashboard() {
                                         </View>
                                         <TouchableOpacity 
                                             style={{ backgroundColor: '#D32F2F', padding: 8, borderRadius: 5 }}
-                                            onPress={async () => {
-                                                try {
-                                                    await updateDoc(doc(db, "alerts", alert.id), { status: 'Reviewed' });
-                                                } catch(e) { console.error("Error updating alert", e); }
+                                            onPress={() => {
+                                                router.push({
+                                                    pathname: "/alert-monitor",
+                                                    params: {
+                                                        id: alert.id,
+                                                        beneficiaryId: alert.beneficiaryId || "",
+                                                        message: alert.message || "",
+                                                        status: alert.status || "Pending",
+                                                        beneficiaryName: alert.beneficiaryName || alert.name || "Patient"
+                                                    }
+                                                });
                                             }}
                                         >
                                             <Text style={{ color: 'white', fontSize: 12, fontWeight: 'bold' }}>Review</Text>
@@ -412,6 +452,24 @@ export default function AshaDashboard() {
                                     </View>
                                 ))}
                             </View>
+                        )}
+
+                        <Text style={styles.sectionTitle}>Recent Notifications</Text>
+                        {notifications.length > 0 ? (
+                            <View style={{ marginBottom: 15 }}>
+                                {notifications.slice(0, 3).map(notif => (
+                                    <TouchableOpacity 
+                                        key={notif.id} 
+                                        style={[styles.notifyBox, { marginBottom: 8 }]}
+                                        onPress={() => router.push("/notification")}
+                                    >
+                                        <Ionicons name="megaphone" size={20} color="#1F7A6B" />
+                                        <Text style={styles.notifyText} numberOfLines={2}>{notif.message || notif.title}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        ) : (
+                            <Text style={{ marginLeft: 15, color: '#888', marginBottom: 15 }}>No new notifications.</Text>
                         )}
 
                         <View style={styles.performanceRow}>

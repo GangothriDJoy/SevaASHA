@@ -1,7 +1,9 @@
-import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, SafeAreaView, Dimensions, StatusBar, Image } from "react-native";
+import React, { useState, useEffect } from "react";
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, SafeAreaView, Dimensions, StatusBar, Image, Linking } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import { db } from '@/firebaseConfig';
 
 const { width } = Dimensions.get("window");
 
@@ -11,6 +13,48 @@ export default function MotherDashboard() {
     const { name } = useLocalSearchParams();
 
     const userName = String(name || "Meera").trim();
+    const mobile = params.mobile as string;
+
+    const [ashaWorker, setAshaWorker] = useState({ name: "Loading...", mobile: "" });
+
+    useEffect(() => {
+        const fetchWorker = async () => {
+            if (!mobile) return;
+            try {
+                let workerNum = "";
+                // Check if user record has workerId
+                const userSnap = await getDoc(doc(db, "users", mobile));
+                if (userSnap.exists() && userSnap.data().workerId) {
+                    workerNum = userSnap.data().workerId;
+                } else {
+                    // Check household_members collection fallback
+                    const hhQuery = query(collection(db, "household_members"), where("mobile", "==", mobile));
+                    const hhSnap = await getDocs(hhQuery);
+                    if (!hhSnap.empty && hhSnap.docs[0].data().workerId) {
+                        workerNum = hhSnap.docs[0].data().workerId;
+                    }
+                }
+
+                if (workerNum) {
+                    const wSnap = await getDoc(doc(db, "users", workerNum));
+                    if (wSnap.exists()) {
+                        setAshaWorker({ name: wSnap.data().name || "Your ASHA Worker", mobile: workerNum });
+                    } else {
+                        const wq = query(collection(db, "users"), where("mobile", "==", workerNum));
+                        const ws = await getDocs(wq);
+                        if (!ws.empty) setAshaWorker({ name: ws.docs[0].data().name, mobile: workerNum });
+                        else setAshaWorker({ name: "Your ASHA Worker", mobile: workerNum });
+                    }
+                } else {
+                    setAshaWorker({ name: "Unassigned Worker", mobile: "" });
+                }
+            } catch (error) {
+                console.log(error);
+                setAshaWorker({ name: "Network Error", mobile: "" });
+            }
+        };
+        fetchWorker();
+    }, [mobile]);
 
     // Mock Dashboard Stats for Mother
     const motherStats = {
@@ -101,28 +145,28 @@ export default function MotherDashboard() {
                     </View>
 
                     <View style={styles.grid}>
-                        <TouchableOpacity style={styles.gridBtn} activeOpacity={0.7}>
+                        <TouchableOpacity style={styles.gridBtn} activeOpacity={0.7} onPress={() => router.push({ pathname: "/health-records" as any, params })}>
                             <View style={[styles.btnIcon, { backgroundColor: '#FCE4EC' }]}>
                                 <Ionicons name="clipboard" size={28} color="#C2185B" />
                             </View>
                             <Text style={styles.btnLabel}>Health Records</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.gridBtn} activeOpacity={0.7}>
+                        <TouchableOpacity style={styles.gridBtn} activeOpacity={0.7} onPress={() => router.push({ pathname: "/medicines" as any, params })}>
                             <View style={[styles.btnIcon, { backgroundColor: '#E3F2FD' }]}>
                                 <Ionicons name="medkit" size={28} color="#1976D2" />
                             </View>
                             <Text style={styles.btnLabel}>Medicines</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.gridBtn} activeOpacity={0.7}>
+                        <TouchableOpacity style={styles.gridBtn} activeOpacity={0.7} onPress={() => router.push({ pathname: "/diet-plan" as any, params })}>
                             <View style={[styles.btnIcon, { backgroundColor: '#F1F8E9' }]}>
                                 <Ionicons name="restaurant" size={28} color="#388E3C" />
                             </View>
                             <Text style={styles.btnLabel}>Diet Plan</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.gridBtn} activeOpacity={0.7}>
+                        <TouchableOpacity style={styles.gridBtn} activeOpacity={0.7} onPress={() => router.push({ pathname: "/tips-guides" as any, params })}>
                             <View style={[styles.btnIcon, { backgroundColor: '#FFF3E0' }]}>
                                 <Ionicons name="book" size={28} color="#F57C00" />
                             </View>
@@ -131,15 +175,19 @@ export default function MotherDashboard() {
                     </View>
 
                     {/* --- 5. CONTACT ASHA SUPPORT --- */}
-                    <TouchableOpacity style={styles.ashaContactCard} activeOpacity={0.8}>
+                    <TouchableOpacity style={styles.ashaContactCard} activeOpacity={0.8} onPress={() => {
+                        if (ashaWorker.mobile) Linking.openURL(`tel:${ashaWorker.mobile}`);
+                    }}>
                         <View style={styles.ashaAvatar}>
                             <Ionicons name="person" size={24} color="#D81B60" />
                         </View>
                         <View style={styles.ashaTextWrap}>
-                            <Text style={styles.ashaTitle}>Your ASHA Worker</Text>
-                            <Text style={styles.ashaSubText}>Anitha is available to assist you</Text>
+                            <Text style={styles.ashaTitle}>{ashaWorker.name}</Text>
+                            <Text style={styles.ashaSubText}>{ashaWorker.mobile ? "Tap to instantly call your worker" : "No worker assigned yet"}</Text>
                         </View>
-                        <TouchableOpacity style={styles.callBtn} activeOpacity={0.6}>
+                        <TouchableOpacity style={[styles.callBtn, !ashaWorker.mobile && { backgroundColor: '#CCC' }]} activeOpacity={0.6} onPress={() => {
+                            if (ashaWorker.mobile) Linking.openURL(`tel:${ashaWorker.mobile}`);
+                        }}>
                             <Ionicons name="call" size={20} color="#FFFFFF" />
                         </TouchableOpacity>
                     </TouchableOpacity>

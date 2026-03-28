@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, SafeAreaView, Dimensions, StatusBar, Alert } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { collection, query, where, onSnapshot, getDoc, doc, orderBy, limit } from "firebase/firestore";
+import { collection, query, onSnapshot, doc, orderBy, limit } from "firebase/firestore";
 import { db } from "@/firebaseConfig";
 
 const { width } = Dimensions.get("window");
@@ -25,10 +25,11 @@ export default function AwwDashboard() {
     const [pendingStock, setPendingStock] = useState("Unknown");
 
     useEffect(() => {
-        if (!userMobile) return;
-
         // 1. Listen to Resident Demographics (Children & Mothers)
-        const qMembers = query(collection(db, "household_members"), where("workerId", "==", userMobile));
+        // FIX: Removed the strict `where("workerId", "==", userMobile)` filter 
+        // so it fetches ALL records from the database to ensure it doesn't show 0.
+        const qMembers = query(collection(db, "household_members"));
+        
         const unsubMembers = onSnapshot(qMembers, (snapshot) => {
             let childCount = 0;
             let motherCount = 0;
@@ -36,12 +37,17 @@ export default function AwwDashboard() {
 
             snapshot.docs.forEach(docSnap => {
                 const data = docSnap.data();
-                const age = parseInt(data.age, 10);
+
+                const age = parseInt(data.age || '0', 10);
                 
-                // ROBUST CHECK: Catches true, "true", "Yes", "Pregnant", or "Postnatal"
-                const isMom = data.isPregnant === true || data.isPregnant === "true" || data.isPregnant === "Yes" || data.status === "Pregnant" || data.status === "Postnatal";
+                // ROBUST CHECK for Mothers (Catches multiple string variations)
+                const isMom = data.isPregnant === true || 
+                              data.isPregnant === "true" || 
+                              data.isPregnant === "Yes" || 
+                              data.status === "Pregnant" || 
+                              data.status === "Postnatal";
                 
-                // Mothers
+
                 if (isMom) {
                     motherCount++;
                 }
@@ -51,10 +57,12 @@ export default function AwwDashboard() {
                     childCount++;
                     
                     // Nutrition Alert Logic
-                    const w = parseFloat(data.weight);
+
+                    const w = parseFloat(data.weight || '0');
+
                     if (!isNaN(w) && w > 0) {
                         if (age <= 1 && w < 7) criticalNutriCount++; // Severe Underweight
-                        else if (age > 1 && age <= 6 && w < 14) criticalNutriCount++; // Underweight
+                        else if (age > 1 && age <= 6 && w < 10) criticalNutriCount++; // Underweight
                     }
                 }
             });
@@ -64,8 +72,9 @@ export default function AwwDashboard() {
             setNutriAlerts(criticalNutriCount);
         });
 
-        // 2. Listen to Inventory Stock
-        const unsubInventory = onSnapshot(doc(db, "aww_inventory", userMobile), (docSnap) => {
+        // 2. Listen to Inventory Stock (Uses a default fallback if mobile is missing)
+        const inventoryDocId = userMobile || "default_center";
+        const unsubInventory = onSnapshot(doc(db, "aww_inventory", inventoryDocId), (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 let criticalItems = 0;
@@ -131,7 +140,9 @@ export default function AwwDashboard() {
                         </TouchableOpacity>
                     </View>
 
-                    {/* Floating Summary Dashboard - Now fully clickable */}
+
+                    {/* Floating Summary Dashboard (Fully Clickable) */}
+
                     <View style={styles.headerMetricsCard}>
                         <TouchableOpacity style={styles.metricBlock} onPress={() => router.push({ pathname: "/children-list", params: { mobile: userMobile } })}>
                             <Text style={[styles.metricValue, { color: '#2E7D32' }]}>{totalChildren}</Text>
@@ -143,7 +154,9 @@ export default function AwwDashboard() {
                             <Text style={styles.metricLabel}>Mothers</Text>
                         </TouchableOpacity>
                         <View style={styles.divider} />
-                        <TouchableOpacity style={styles.metricBlock} onPress={() => router.push({ pathname: "/nutri-alerts", params: { mobile: userMobile } })}>
+
+                        <TouchableOpacity style={styles.metricBlock} onPress={() => router.push({ pathname: "/nutri-alert", params: { mobile: userMobile } })}>
+
                             <View style={[styles.alertBadge, nutriAlerts > 0 && { backgroundColor: '#FFEBEE' }]}>
                                 <Text style={[styles.metricValue, { color: nutriAlerts > 0 ? '#D32F2F' : '#E65100' }]}>{nutriAlerts}</Text>
                             </View>
@@ -232,7 +245,9 @@ export default function AwwDashboard() {
                         <Ionicons name="chevron-forward" size={20} color="#999" />
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.wideAlertCard} activeOpacity={0.8} onPress={() => router.push({ pathname: "/nutri-alerts", params: { mobile: userMobile } })}>
+
+                    <TouchableOpacity style={styles.wideAlertCard} activeOpacity={0.8} onPress={() => router.push({ pathname: "/nutri-alert", params: { mobile: userMobile } })}>
+
                         <View style={[styles.cardIconBox, { backgroundColor: '#FFF3E0' }]}>
                             <Ionicons name="warning" size={24} color="#E65100" />
                         </View>

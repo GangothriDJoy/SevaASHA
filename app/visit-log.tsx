@@ -3,7 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useState, useEffect } from "react";
 import { db } from "../firebaseConfig";
-import { collection, query, getDocs, orderBy, collectionGroup, where } from "firebase/firestore";
+import { collection, query, getDocs, orderBy, collectionGroup } from "firebase/firestore";
 
 export default function VisitLog() {
     const router = useRouter();
@@ -14,9 +14,7 @@ export default function VisitLog() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (workerMobile) {
-            fetchVisitLogs();
-        }
+        fetchVisitLogs();
     }, [workerMobile]);
 
     const fetchVisitLogs = async () => {
@@ -27,43 +25,20 @@ export default function VisitLog() {
             // 1. Fetch Household Visits (The "Mark as Visited" logs)
             const householdQuery = query(
                 collection(db, "household_visits"),
-                where("workerId", "==", workerMobile),
                 orderBy("createdAt", "desc")
             );
-            
-            try {
-                const householdSnap = await getDocs(householdQuery);
-                householdSnap.forEach((doc) => {
-                    const data = doc.data();
-                    visitData.push({
-                        id: doc.id,
-                        title: data.patientName || `House: ${data.houseId}`,
-                        subtitle: data.visitType || "Routine Visit",
-                        timestamp: data.createdAt,
-                        type: 'visit'
-                    });
+            const householdSnap = await getDocs(householdQuery);
+
+            householdSnap.forEach((doc) => {
+                const data = doc.data();
+                visitData.push({
+                    id: doc.id,
+                    title: data.patientName || `House: ${data.houseId}`,
+                    subtitle: data.visitType || "Routine Visit",
+                    timestamp: data.createdAt,
+                    type: 'visit'
                 });
-            } catch (hhError) {
-                // Failsafe fallback incase workerId index doesn't exist
-                const householdQueryUnfiltered = query(
-                    collection(db, "household_visits"),
-                    orderBy("createdAt", "desc")
-                );
-                const householdSnapUnfil = await getDocs(householdQueryUnfiltered);
-                householdSnapUnfil.forEach((doc) => {
-                    const data = doc.data();
-                    // Fallback software filter
-                    if (data.workerId === workerMobile || !data.workerId) {
-                        visitData.push({
-                            id: doc.id,
-                            title: data.patientName || `House: ${data.houseId}`,
-                            subtitle: data.visitType || "Routine Visit",
-                            timestamp: data.createdAt,
-                            type: 'visit'
-                        });
-                    }
-                });
-            }
+            });
 
             // 2. Fetch Vitals Entries (Specific health checkups)
             const vitalsQuery = query(

@@ -187,8 +187,9 @@ export default function AdminDashboard() {
             const children = new Set();
             snapshot.forEach((doc) => {
                 const data = doc.data();
-                if (data.dueDate && data.dueDate < todayISO && data.childId) {
-                    children.add(data.childId);
+                if (data.dueDate && data.dueDate < todayISO) {
+                    const identifier = data.childId || data.childName || doc.id;
+                    children.add(identifier);
                 }
             });
             setAdminStats(prev => ({ ...prev, immunizationDue: children.size }));
@@ -488,8 +489,8 @@ const styles = StyleSheet.create({
     statBox: { width: '48%', backgroundColor: '#FFFFFF', padding: 18, borderRadius: 20, marginBottom: 12, borderLeftWidth: 5, alignItems: 'center', elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 5 },
     statNumber: { fontSize: 24, fontWeight: 'bold' },
     statLabel: { fontSize: 13, color: '#7F8C8D', fontWeight: '600', marginTop: 4, textAlign: 'center' },
-    actionGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginTop: 10 },
-    moduleBtn: { width: '31%', aspectRatio: 1, backgroundColor: 'white', borderRadius: 15, justifyContent: 'center', alignItems: 'center', marginBottom: 10, elevation: 2, borderWidth: 1, borderColor: '#f0f0f0' },
+    actionGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: Platform.OS === 'web' ? "flex-start" : "space-between", gap: Platform.OS === 'web' ? 20 : 0, marginTop: 10 },
+    moduleBtn: { width: Platform.OS === 'web' ? 120 : '31%', height: Platform.OS === 'web' ? 120 : undefined, aspectRatio: Platform.OS === 'web' ? undefined : 1, backgroundColor: 'white', borderRadius: 15, justifyContent: 'center', alignItems: 'center', marginBottom: Platform.OS === 'web' ? 20 : 10, elevation: 2, borderWidth: 1, borderColor: '#f0f0f0' },
     actionText: { color: "#333", fontWeight: '600' },
     badgeNotif: { position: 'absolute', top: -3, right: -3, backgroundColor: '#D32F2F', borderRadius: 10, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#FFF' },
     badgeNotifText: { color: 'white', fontSize: 10, fontWeight: 'bold' },

@@ -218,11 +218,9 @@ export default function Auth() {
                     placeholderTextColor="#666"
                     style={[
                         styles.input,
-                        // Optional: turns border red if user started typing but hasn't reached 10 digits
                         hasAttempted && mobile.length > 0 && mobile.length !== 10 ? { borderColor: 'red' } : null
                     ]}
                     value={mobile}
-                    // This regex replaces any non-digit character with an empty string
                     onChangeText={(val) => setMobile(val.replace(/[^0-9]/g, ''))}
                     keyboardType="phone-pad"
                     maxLength={10} // Prevents typing more than 10 digits

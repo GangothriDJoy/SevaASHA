@@ -8,13 +8,18 @@ import { Ionicons } from "@expo/vector-icons";
 export default function PatientDetails() {
     const router = useRouter();
     const params = useLocalSearchParams();
-    const { userId } = params;
-    const [patient, setPatient] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
+    const userId = params.userId || params.id;
+    
+    // Use params as initial data for instant UI rendering if name was passed
+    const [patient, setPatient] = useState<any>(params.name ? params : null);
+    const [loading, setLoading] = useState(!params.name);
 
     useEffect(() => {
         const fetchPatient = async () => {
-            if (!userId) return;
+            if (!userId) {
+                setLoading(false);
+                return;
+            }
             try {
                 let docRef = doc(db, "beneficiaries", String(userId));
                 let snap = await getDoc(docRef);
@@ -22,7 +27,7 @@ export default function PatientDetails() {
                     docRef = doc(db, "household_members", String(userId));
                     snap = await getDoc(docRef);
                 }
-                if (snap.exists()) setPatient(snap.data());
+                if (snap.exists()) setPatient({ id: snap.id, ...snap.data() });
             } catch (e) {
                 console.error(e);
             } finally {
