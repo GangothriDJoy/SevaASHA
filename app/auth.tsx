@@ -3,7 +3,12 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    StyleSheet, Platform,
+    StyleSheet, 
+    Platform,
+    Image,
+    KeyboardAvoidingView,
+    ScrollView,
+    SafeAreaView,
 } from "react-native";
 import { getAuth, sendPasswordResetEmail } from "firebase/auth";
 import { useRouter } from "expo-router";
@@ -139,258 +144,368 @@ export default function Auth() {
 
 
     return (
-        <View style={styles.container}>
-            {/* Header */}
-            <View style={styles.header}>
-                <Text style={styles.headerText}>Login</Text>
-            </View>
-
-            {/* Form */}
-            <View style={styles.form}>
-                <Text style={styles.label}>Select Role</Text>
-                {/* --- ROLE SELECTION --- */}
-                {Platform.OS === "web" ? (
-                    /* --- 💻 LAPTOP / WEB DROPDOWN --- */
-                    // @ts-ignore
-                    <select
-                        value={role || ""}
-                        onChange={(e: any) => setRole(e.target.value)}
-                        style={{
-                            padding: 15,
-                            borderRadius: 10,
-                            borderWidth: 1,
-                            // Keeps your validation logic active on the web!
-                            borderColor: (hasAttempted && !isRoleSelected) ? "red" : "#ccc",
-                            backgroundColor: "white",
-                            fontSize: 16,
-                            fontFamily: "inherit",
-                            width: "100%",
-                            marginBottom: 15,
-                            boxSizing: "border-box",
-                            cursor: "pointer",
-                            outline: "none",
-                            color: (role === "-Select-" || role === "Not Selected") ? "#999" : "#000",
-                        }}
-                    >
-                        <option value="" hidden style={{ color: "#999" }}>-Select-</option>
-                        <option value="" disabled>-Select-</option>
-                        <option value="ASHA Worker">ASHA Worker</option>
-                        <option value="Anganwadi Worker">Anganwadi Worker</option>
-                        <option value="JPHN">JPHN</option>
-                        <option value="Supervisor">Supervisor</option>
-                        <option value="Mother">Mother / Beneficiary</option>
-                    </select>
-                ) : (
-                    /* --- 📱 MOBILE PICKER --- */
-                    <View style={[
-                        styles.pickerContainer,
-                        hasAttempted && !isRoleSelected && { borderColor: 'red', borderWidth: 1 }
-                    ]}>
-                        <Picker
-                            selectedValue={role}
-                            style={{ color: '#282828ff' }}
-                            dropdownIconColor="#eaeaeaff"
-                            onValueChange={(val) => {
-                                if (val !== "")
-                                    setRole(val);
-                            }}
-                        >
-                            {role === "" && (
-                                <Picker.Item label="-Select-" value="" color="#999" />
-                            )}
-                            <Picker.Item label="ASHA Worker" value="ASHA Worker" />
-                            <Picker.Item label="Anganwadi Worker" value="Anganwadi Worker" />
-                            <Picker.Item label="JPHN" value="JPHN" />
-                            <Picker.Item label="Supervisor" value="Supervisor" />
-                            <Picker.Item label="Mother / Beneficiary" value="Mother" />
-                        </Picker>
+        <SafeAreaView style={styles.safeArea}>
+            <KeyboardAvoidingView 
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                style={{ flex: 1 }}
+            >
+                <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
+                    
+                    {/* Top Decorated Header */}
+                    <View style={styles.topSection}>
+                        <View style={styles.logoContainer}>
+                            <Image
+                                source={require('../logo.jpeg')}
+                                style={styles.logo}
+                                resizeMode="cover"
+                            />
+                        </View>
+                        <Text style={styles.welcomeTitle}>Welcome to SevaASHA!</Text>
+                        <Text style={styles.welcomeSubtitle}>Sign in to your account</Text>
                     </View>
-                )}
 
-                {/* Error Message */}
-                {hasAttempted && !isRoleSelected && (
-                    <Text style={[styles.errorText, { marginTop: 5 }]}>
-                        Please select a valid account type to continue.
-                    </Text>
-                )}
-                <TextInput
-                    placeholder="Mobile Number"
-                    placeholderTextColor="#666"
-                    style={[
-                        styles.input,
-                        hasAttempted && mobile.length > 0 && mobile.length !== 10 ? { borderColor: 'red' } : null
-                    ]}
-                    value={mobile}
-                    onChangeText={(val) => setMobile(val.replace(/[^0-9]/g, ''))}
-                    keyboardType="phone-pad"
-                    maxLength={10} // Prevents typing more than 10 digits
-                />
+                    {/* Form inside a Card */}
+                    <View style={styles.card}>
+                        
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>Select Role</Text>
+                            {Platform.OS === "web" ? (
+                                // @ts-ignore
+                                <select
+                                    value={role || ""}
+                                    onChange={(e: any) => setRole(e.target.value)}
+                                    style={{
+                                        padding: 15,
+                                        borderRadius: 12,
+                                        borderWidth: 1,
+                                        borderColor: (hasAttempted && !isRoleSelected) ? "red" : "#E2E8F0",
+                                        backgroundColor: "#F8FAFC",
+                                        fontSize: 16,
+                                        fontFamily: "inherit",
+                                        width: "100%",
+                                        boxSizing: "border-box",
+                                        cursor: "pointer",
+                                        outline: "none",
+                                        color: (role === "-Select-" || role === "Not Selected") ? "#94A3B8" : "#0F172A",
+                                    }}
+                                >
+                                    <option value="" hidden style={{ color: "#999" }}>-Select-</option>
+                                    <option value="" disabled>-Select-</option>
+                                    <option value="ASHA Worker">ASHA Worker</option>
+                                    <option value="Anganwadi Worker">Anganwadi Worker</option>
+                                    <option value="JPHN">JPHN</option>
+                                    <option value="Supervisor">Supervisor</option>
+                                    <option value="Mother">Mother / Beneficiary</option>
+                                </select>
+                            ) : (
+                                <View style={[
+                                    styles.pickerContainer,
+                                    hasAttempted && !isRoleSelected && { borderColor: 'red', borderWidth: 1 }
+                                ]}>
+                                    <Picker
+                                        selectedValue={role}
+                                        style={{ color: '#0F172A' }}
+                                        dropdownIconColor="#94A3B8"
+                                        onValueChange={(val) => {
+                                            if (val !== "") setRole(val);
+                                        }}
+                                    >
+                                        {role === "" && (
+                                            <Picker.Item label="-Select-" value="" color="#94A3B8" />
+                                        )}
+                                        <Picker.Item label="ASHA Worker" value="ASHA Worker" />
+                                        <Picker.Item label="Anganwadi Worker" value="Anganwadi Worker" />
+                                        <Picker.Item label="JPHN" value="JPHN" />
+                                        <Picker.Item label="Supervisor" value="Supervisor" />
+                                        <Picker.Item label="Mother / Beneficiary" value="Mother" />
+                                    </Picker>
+                                </View>
+                            )}
+                            
+                            {hasAttempted && !isRoleSelected && (
+                                <Text style={styles.errorText}>
+                                    Please select a valid account type to continue.
+                                </Text>
+                            )}
+                        </View>
 
-                {/* 2. Add the Conditional Alert Message */}
-                {mobile.length > 0 && mobile.length < 10 && (
-                    <Text style={styles.warningText}>
-                        Mobile number must be exactly 10 digits.
-                    </Text>
-                )}
+                        <View style={styles.inputGroup}>
+                            <View style={[
+                                styles.inputContainer,
+                                hasAttempted && mobile.length > 0 && mobile.length !== 10 ? { borderColor: 'red' } : null
+                            ]}>
+                                <Ionicons name="call-outline" size={20} color="#64748B" style={styles.inputIcon} />
+                                <TextInput
+                                    placeholder="Mobile Number"
+                                    placeholderTextColor="#94A3B8"
+                                    style={styles.input}
+                                    value={mobile}
+                                    onChangeText={(val) => setMobile(val.replace(/[^0-9]/g, ''))}
+                                    keyboardType="phone-pad"
+                                    maxLength={10}
+                                />
+                            </View>
+                            {mobile.length > 0 && mobile.length < 10 && (
+                                <Text style={styles.warningText}>
+                                    Mobile number must be exactly 10 digits.
+                                </Text>
+                            )}
+                        </View>
 
-                <View style={styles.passwordContainer}>
-                    <TextInput
-                        placeholder="Password"
-                        placeholderTextColor="#666"
-                        secureTextEntry={!showPassword}
-                        style={styles.passwordInput}
-                        value={password}
-                        onChangeText={setPassword}
-                    />
-                    <TouchableOpacity
-                        style={styles.eyeIcon}
-                        onPress={() => setShowPassword(!showPassword)}
-                    >
-                        <Ionicons name={showPassword ? "eye-off" : "eye"} size={24} color="#777" />
-                    </TouchableOpacity>
-                </View>
+                        <View style={styles.inputGroup}>
+                            <View style={styles.passwordContainer}>
+                                <Ionicons name="lock-closed-outline" size={20} color="#64748B" style={styles.inputIcon} />
+                                <TextInput
+                                    placeholder="Password"
+                                    placeholderTextColor="#94A3B8"
+                                    secureTextEntry={!showPassword}
+                                    style={styles.passwordInput}
+                                    value={password}
+                                    onChangeText={setPassword}
+                                />
+                                <TouchableOpacity
+                                    style={styles.eyeIcon}
+                                    onPress={() => setShowPassword(!showPassword)}
+                                >
+                                    <Ionicons name={showPassword ? "eye-off" : "eye"} size={22} color="#94A3B8" />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
 
-                {/* Conditionally render the error message if it exists */}
-                {errorMessage ? (
-                    <Text style={styles.errorText}>{errorMessage}</Text>
-                ) : null}
+                        {errorMessage ? (
+                            <Text style={styles.errorTextGlobal}>{errorMessage}</Text>
+                        ) : null}
 
-                <TouchableOpacity
-                    onPress={() => router.push("/ForgotPassword")} // ⬅️ Points to your new page
-                    style={{ marginTop: 15, marginBottom: 15, alignSelf: 'center' }}
-                >
-                    <Text style={{
-                        color: '#007AFF',
-                        fontSize: 14,
-                        fontWeight: '500',
-                        textDecorationLine: Platform.OS === 'web' ? 'underline' : 'none',
-                        cursor: Platform.OS === 'web' ? 'pointer' : 'default',
-                    } as any}>
-                        Forgot Password?
-                    </Text>
-                </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={() => router.push("/ForgotPassword")}
+                            style={styles.forgotBtn}
+                        >
+                            <Text style={styles.forgotText}>
+                                Forgot Password?
+                            </Text>
+                        </TouchableOpacity>
 
-                <TouchableOpacity
-                    style={styles.loginButton}
-                    onPress={handleLogin} // Changed this from router.push to our new function
-                >
-                    <Text style={styles.loginText}>LOGIN</Text>
-                </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.loginButton}
+                            onPress={handleLogin}
+                            activeOpacity={0.8}
+                        >
+                            <Text style={styles.loginText}>LOGIN</Text>
+                        </TouchableOpacity>
 
-                <TouchableOpacity
-                    onPress={() => router.push("/register")}
-                >
-                    <Text style={styles.registerLink}>New user? Register here</Text>
-                </TouchableOpacity>
-            </View>
-        </View>
+                        <View style={styles.dividerContainer}>
+                            <View style={styles.dividerLine} />
+                            <Text style={styles.dividerText}>OR</Text>
+                            <View style={styles.dividerLine} />
+                        </View>
+
+                        <TouchableOpacity
+                            onPress={() => router.push("/register")}
+                            style={styles.registerBtn}
+                            activeOpacity={0.6}
+                        >
+                            <Text style={styles.registerText}>New user? <Text style={styles.registerTextBold}>Register here</Text></Text>
+                        </TouchableOpacity>
+
+                    </View>
+                </ScrollView>
+            </KeyboardAvoidingView>
+        </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
-    container: {
+    safeArea: {
         flex: 1,
-        backgroundColor: "#F4F6F8",
-    },
-    header: {
         backgroundColor: "#1F7A6B",
-        paddingVertical: 24,
-        paddingHorizontal: 20,
     },
-    headerText: {
+    scrollContainer: {
+        flexGrow: 1,
+        justifyContent: "center",
+        padding: 20,
+    },
+    topSection: {
+        alignItems: "center",
+        marginBottom: 30,
+        marginTop: 10,
+    },
+    logoContainer: {
+        width: 100,
+        height: 100,
+        backgroundColor: '#FFFFFF', 
+        borderRadius: 50,     
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 16,
+        elevation: 10,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 5 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        overflow: 'hidden',   
+    },
+    logo: {
+        width: '100%',
+        height: '100%',
+        transform: [
+            { scale: 1.65 },
+            { translateY: 5 },
+            { translateX: -1 }
+        ],
+    },
+    welcomeTitle: {
+        fontSize: 28,
         color: "white",
+        fontWeight: "bold",
+        marginBottom: 8,
+    },
+    welcomeSubtitle: {
+        fontSize: 16,
+        color: "#E2E8F0",
+        fontWeight: "500",
+    },
+    card: {
+        backgroundColor: "white",
+        borderRadius: 24,
+        padding: 24,
+        elevation: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.1,
+        shadowRadius: 15,
+    },
+    sectionTitle: {
         fontSize: 22,
         fontWeight: "bold",
+        color: "#0F172A",
+        marginBottom: 24,
+        textAlign: "center",
     },
-    form: {
-        padding: 20,
+    inputGroup: {
+        marginBottom: 16,
     },
     label: {
         marginBottom: 8,
-        fontWeight: "500",
+        fontWeight: "600",
+        color: "#334155",
+        fontSize: 14,
     },
     pickerContainer: {
-        backgroundColor: "white",
-        borderRadius: 10,
-        marginBottom: 15,
+        backgroundColor: "#F8FAFC",
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: "#E2E8F0",
+        overflow: "hidden",
+    },
+    inputContainer: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#F8FAFC",
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: "#E2E8F0",
+        paddingHorizontal: 12,
+    },
+    inputIcon: {
+        marginRight: 8,
     },
     input: {
-        backgroundColor: "white",
-        padding: 15,
-        borderRadius: 10,
-        marginBottom: 15,
-        color: '#333',
+        flex: 1,
+        paddingVertical: 14,
+        color: '#0F172A',
+        fontSize: 16,
     },
     passwordContainer: {
         flexDirection: "row",
         alignItems: "center",
-        backgroundColor: "white",
-        borderRadius: 10,
-        marginBottom: 15,
+        backgroundColor: "#F8FAFC",
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: "#E2E8F0",
+        paddingHorizontal: 12,
     },
     passwordInput: {
         flex: 1,
-        padding: 15,
-        color: '#333',
+        paddingVertical: 14,
+        color: '#0F172A',
+        fontSize: 16,
     },
     eyeIcon: {
-        padding: 15,
+        padding: 8,
     },
+    errorText: {
+        color: "#EF4444",
+        fontSize: 12,
+        marginTop: 6,
+        fontWeight: "500",
+    },
+    errorTextGlobal: {
+        color: "#EF4444",
+        textAlign: "center",
+        marginBottom: 12,
+        fontWeight: "600",
+        fontSize: 14,
+    },
+    warningText: {
+        color: "#F59E0B",
+        fontSize: 12,
+        marginTop: 6,
+        fontWeight: "500",
+    },
+    forgotBtn: {
+        alignSelf: 'center',
+        marginVertical: 4,
+    },
+    forgotText: {
+        color: '#1F7A6B',
+        fontSize: 14,
+        fontWeight: '600',
+        textDecorationLine: Platform.OS === 'web' ? 'underline' : 'none',
+        cursor: Platform.OS === 'web' ? 'pointer' : 'default',
+    } as any,
     loginButton: {
-        backgroundColor: "#4CAF50",
-        padding: 16,
-        borderRadius: 10,
+        backgroundColor: "#1F7A6B",
+        paddingVertical: 16,
+        borderRadius: 12,
         alignItems: "center",
-        marginTop: 10,
+        marginTop: 16,
+        elevation: 3,
+        shadowColor: '#1F7A6B',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 6,
     },
     loginText: {
         color: "white",
         fontWeight: "bold",
         fontSize: 16,
+        letterSpacing: 0.5,
     },
-    registerLink: {
-        textAlign: "center",
-        marginTop: 20,
-        color: "#1F7A6B",
-        fontWeight: "500",
-    },
-    // Added style for the error text
-    errorText: {
-        color: "red",
-        textAlign: "center",
-        marginBottom: 10,
-        fontWeight: "500",
-    },
-    sectionTitle: {
-        fontSize: 18,
-        fontWeight: "bold",
-        color: "#1F7A6B",
-        marginTop: 10,
-        marginBottom: 15
-    },
-    requiredNote: {
-        fontSize: 13,
-        color: "#666",
-        fontStyle: "italic",
-        marginBottom: 15,
-        paddingHorizontal: 5,
-    },
-    mandatoryStar: {
-        color: "red",
-        marginLeft: 3,
-        fontWeight: "bold",
-    },
-    labelRow: {
+    dividerContainer: {
         flexDirection: "row",
         alignItems: "center",
-        marginBottom: 5
+        marginVertical: 20,
     },
-    warningText: {
-        color: "#FF9800", // Orange/Amber color for a warning
+    dividerLine: {
+        flex: 1,
+        height: 1,
+        backgroundColor: "#E2E8F0",
+    },
+    dividerText: {
+        marginHorizontal: 10,
+        color: "#94A3B8",
+        fontWeight: "600",
         fontSize: 12,
-        marginTop: -10,   // Pulls it closer to the input field
-        marginBottom: 10,
-        paddingLeft: 5,
-        fontWeight: "500",
-    }
+    },
+    registerBtn: {
+        alignItems: "center",
+    },
+    registerText: {
+        color: "#64748B",
+        fontSize: 15,
+    },
+    registerTextBold: {
+        color: "#1F7A6B",
+        fontWeight: "bold",
+    },
 });
