@@ -36,20 +36,23 @@ export default function AwwDashboard() {
 
             snapshot.docs.forEach(docSnap => {
                 const data = docSnap.data();
-                const age = parseInt(data.age);
+                const age = parseInt(data.age, 10);
+                
+                // ROBUST CHECK: Catches true, "true", "Yes", "Pregnant", or "Postnatal"
+                const isMom = data.isPregnant === true || data.isPregnant === "true" || data.isPregnant === "Yes" || data.status === "Pregnant" || data.status === "Postnatal";
                 
                 // Mothers
-                if (data.isPregnant === true || data.isPregnant === "true" || data.status === "Postnatal") {
+                if (isMom) {
                     motherCount++;
                 }
                 
-                // Children <= 6
-                if (!isNaN(age) && age <= 6) {
+                // Children <= 6 (excluding mothers)
+                if (!isNaN(age) && age <= 6 && !isMom) {
                     childCount++;
                     
                     // Nutrition Alert Logic
                     const w = parseFloat(data.weight);
-                    if (!isNaN(w)) {
+                    if (!isNaN(w) && w > 0) {
                         if (age <= 1 && w < 7) criticalNutriCount++; // Severe Underweight
                         else if (age > 1 && age <= 6 && w < 14) criticalNutriCount++; // Underweight
                     }
@@ -120,7 +123,7 @@ export default function AwwDashboard() {
                             <Ionicons name="chevron-back" size={26} color="#FFFFFF" />
                         </TouchableOpacity>
                         <View style={styles.headerTextWrapper}>
-                            <Text style={styles.headerTitle}>ANGANAWADI CENTRE</Text>
+                            <Text style={styles.headerTitle}>ANGANWADI CENTRE</Text>
                             <Text style={styles.subHeaderText}>Welcome back, {userName}</Text>
                         </View>
                         <TouchableOpacity style={styles.profileBtn} activeOpacity={0.7} onPress={() => router.push({ pathname: '/settings', params: { role: userRole, name: userName } })}>
@@ -128,24 +131,24 @@ export default function AwwDashboard() {
                         </TouchableOpacity>
                     </View>
 
-                    {/* Floating Summary Dashboard */}
+                    {/* Floating Summary Dashboard - Now fully clickable */}
                     <View style={styles.headerMetricsCard}>
-                        <View style={styles.metricBlock}>
+                        <TouchableOpacity style={styles.metricBlock} onPress={() => router.push({ pathname: "/children-list", params: { mobile: userMobile } })}>
                             <Text style={[styles.metricValue, { color: '#2E7D32' }]}>{totalChildren}</Text>
                             <Text style={styles.metricLabel}>Children</Text>
-                        </View>
+                        </TouchableOpacity>
                         <View style={styles.divider} />
                         <TouchableOpacity style={styles.metricBlock} onPress={() => router.push({ pathname: "/mother-list", params: { mobile: userMobile } })}>
                             <Text style={[styles.metricValue, { color: '#1565C0' }]}>{pregnantMothers}</Text>
                             <Text style={styles.metricLabel}>Mothers</Text>
                         </TouchableOpacity>
                         <View style={styles.divider} />
-                        <View style={styles.metricBlock}>
+                        <TouchableOpacity style={styles.metricBlock} onPress={() => router.push({ pathname: "/nutri-alerts", params: { mobile: userMobile } })}>
                             <View style={[styles.alertBadge, nutriAlerts > 0 && { backgroundColor: '#FFEBEE' }]}>
                                 <Text style={[styles.metricValue, { color: nutriAlerts > 0 ? '#D32F2F' : '#E65100' }]}>{nutriAlerts}</Text>
                             </View>
                             <Text style={styles.metricLabel}>Nutri-Alerts</Text>
-                        </View>
+                        </TouchableOpacity>
                     </View>
                 </View>
 
@@ -157,7 +160,7 @@ export default function AwwDashboard() {
                                 <View key={bc.id} style={styles.broadcastBox}>
                                     <Ionicons name="megaphone" size={20} color="#E65100" />
                                     <View style={{ flex: 1, marginLeft: 10 }}>
-                                        <Text style={{ color: '#E65100', fontWeight: 'bold', fontSize: 13 }}>Central Broadcast for {bc.target}</Text>
+                                        <Text style={{ color: '#E65100', fontWeight: 'bold', fontSize: 13 }}>Central Broadcast for {bc.target || "All"}</Text>
                                         <Text style={{ color: '#E65100', fontSize: 14, marginTop: 2 }}>{bc.message}</Text>
                                     </View>
                                 </View>
@@ -229,7 +232,7 @@ export default function AwwDashboard() {
                         <Ionicons name="chevron-forward" size={20} color="#999" />
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.wideAlertCard} activeOpacity={0.8} onPress={() => router.push({ pathname: "/growth-chart", params: { mobile: userMobile } })}>
+                    <TouchableOpacity style={styles.wideAlertCard} activeOpacity={0.8} onPress={() => router.push({ pathname: "/nutri-alerts", params: { mobile: userMobile } })}>
                         <View style={[styles.cardIconBox, { backgroundColor: '#FFF3E0' }]}>
                             <Ionicons name="warning" size={24} color="#E65100" />
                         </View>
@@ -270,7 +273,7 @@ const emergencyShadow = Platform.select({
 
 const styles = StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: "#D84315" },
-    container: { flex: 1, backgroundColor: "#FFFBF9" }, // Very soft warm white
+    container: { flex: 1, backgroundColor: "#FFFBF9" },
 
     header: { backgroundColor: "#D84315", paddingHorizontal: 20, paddingTop: Platform.OS === 'android' ? 20 : 10, paddingBottom: 45, borderBottomLeftRadius: 30, borderBottomRightRadius: 30, zIndex: 10 },
     headerTopRow: { flexDirection: 'row', alignItems: 'center' },
