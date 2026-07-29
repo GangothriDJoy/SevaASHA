@@ -1,50 +1,76 @@
-# Welcome to your Expo app 👋
+# SevaASHA 🩺📱
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+**SevaASHA** is a mobile application built to empower ASHA (Accredited Social Health Activist) workers and healthcare volunteers in delivering better community healthcare services, tracking patient data, and providing vital support where it's needed most.
 
-## Get started
+---
 
-1. Install dependencies
+## ✨ Key Features
 
+* 📋 **Patient Management:** Easily register and manage patient health records.
+* 🗓️ **Task & Visit Scheduling:** Track daily visits, vaccination schedules, and follow-ups.
+* 📊 **Health Insights:** Monitor critical community health metrics at a glance.
+* 📶 **Offline Support:** Access and log crucial data even with low or no internet connectivity.
+
+---
+
+## 🛠️ Tech Stack
+
+* **Framework:** [React Native](https://reactnative.dev/) with [Expo](https://expo.dev/)
+* **Routing:** [Expo Router](https://docs.expo.dev/router/introduction/) (File-based routing)
+* **Language:** TypeScript / JavaScript
+* **Backend / Database:** Firebase / Node.js *(adjust based on your setup)*
+
+---
+
+## 🚀 Getting Started
+
+Follow these instructions to get a local copy of the project up and running on your machine.
+
+### Prerequisites
+
+* [Node.js](https://nodejs.org/) (v18 or higher recommended)
+* [npm](https://www.npmjs.com/) or [yarn](https://yarnpkg.com/)
+* [Expo Go](https://expo.dev/go) app installed on your Android/iOS device (for testing)
+
+### Installation
+
+1. **Clone the repository:**
+   ```bash
+   git clone [https://github.com/GangothriDJoy/SevaASHA.git](https://github.com/GangothriDJoy/SevaASHA.git)
+   cd SevaASHA
+2. **Install Dependencies:**
    ```bash
    npm install
-   ```
-
-2. Start the app
-
+3. **Start the development server:**
    ```bash
    npx expo start
-   ```
+4. **Run the app**
+   * Scan the QR code shown in your terminal using the Expo Go app on Android or the default Camera app on iOS.
+   * Alternatively, press a for Android Emulator or i for iOS Simulator.
+  
+🤝 Contributing
+Contributions are what make the open-source community such an amazing place to learn, inspire, and create. Any contributions you make are greatly appreciated!
 
-In the output, you'll find options to open the app in a
+Fork the Project
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+Create your Feature Branch (git checkout -b feature/AmazingFeature)
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+Commit your Changes (git commit -m 'Add some AmazingFeature')
 
-## Get a fresh project
+Push to the Branch (git push origin feature/AmazingFeature)
 
-When you're ready, run:
+Open a Pull Request
 
-```bash
-npm run reset-project
-```
+📜 License
+Distributed under the MIT License. See LICENSE for more information.
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+📬 Contact & Support
+Project Link: https://github.com/GangothriDJoy/SevaASHA
 
-## Learn more
 
-To learn more about developing your project with Expo, look at the following resources:
+---
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+### How to apply this on GitHub:
+1. Copy the text block above.
+2. Select all text in your editor window on GitHub and paste this over it.
+3. Click the green **Commit changes...** button in the top right corner.
